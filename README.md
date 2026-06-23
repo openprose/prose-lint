@@ -1,0 +1,213 @@
+# openprose-lint
+
+Deterministic linter for [OpenProse](https://github.com/openprose/prose) programs — a Markdown-based language for multi-agent orchestration. A fast, compiled counterweight to the agent-native execution model: it checks the static, spec-driven parts of the language that should stay deterministic even when execution is delegated to an LLM.
+
+## Quick start
+
+```bash
+git submodule update --init --recursive   # fetch the vendored spec (required)
+cargo run -- lint path/to/program.md      # lint one program (or pass a directory)
+```
+
+Each file reports `ok` or its diagnostics, then a profile summary. Diagnostics
+print as `file:line:col severity CODE message`:
+
+```text
+my-program.md:11:1 warning MDW011 Ensures clause uses hedging language (should/might/may); ensures are obligations, not suggestions
+
+profile: compat
+0 error(s), 1 warning(s) across 1 file(s)
+```
+
+Errors fail the run (exit 1); warnings do not. Build details are below; see
+[Lint Rules](#lint-rules) and [Exit Codes](#exit-codes) for the code families.
+
+## Build
+
+The OpenProse spec is vendored as a git submodule, so initialize submodules first:
+
+```bash
+git submodule update --init --recursive
+cargo build
+```
+
+The crate is not published to crates.io (`publish = false`). After `cargo build`, the
+binary is at `${CARGO_TARGET_DIR:-target}/debug/openprose-lint`; the examples below
+write `openprose-lint` as shorthand. To run a subcommand without installing it on
+your `PATH`, prefer `cargo run -- <subcommand>` (e.g. `cargo run -- lint
+path/to/program.md`).
+
+## Commands
+
+```bash
+# Lint current OpenProse programs (.md format)
+openprose-lint lint path/to/program.md
+openprose-lint lint path/to/programs/
+openprose-lint lint --program-dir path/to/program-directory/
+
+# Preflight briefing for VM agents (~100-200 token structured analysis, scales with program size)
+openprose-lint briefing path/to/program.md
+
+# Spec gap discovery (undocumented vocabulary in a corpus)
+openprose-lint discover path/to/programs/
+
+# Runtime capability requirements for a program or program directory
+openprose-lint capabilities path/to/program.md
+openprose-lint capabilities path/to/program-directory/
+
+# Compare program requirements against a runtime declaration
+openprose-lint capabilities --runtime-manifest specs/runtime-subjects/pi-no-extensions-self-declared.json path/to/program.md
+
+# Validate a deterministic OpenProse adapter manifest
+openprose-lint adapter validate specs/adapters/pi-v1-md.json
+
+# Dogfood a real adapter-initialized Claude Code run against a pinned OpenProse program
+openprose-lint adapter dogfood specs/adapters/claude-code-v1-md.json \
+  reference/openprose-prose/skills/open-prose/examples/16-parallel-reviews \
+  --input-file code=tests/fixtures/get_user_records.py \
+  --expect-binding synthesizer/report
+
+# The proof report keeps separate wire/execute system-append artifacts so
+# phase-specific adapter prompts stay auditable.
+
+# Conformance: run the vendored conformance suite (specs/conformance/)
+openprose-lint conformance
+
+# List available spec sources
+openprose-lint specs
+```
+
+The public linting surface is intentionally small: `lint` for current Markdown programs and
+`lint-legacy` for archived imperative programs. Version- or generation-suffixed command names are
+not part of the public interface.
+
+### Preflight Briefing
+
+The `briefing` command outputs a versioned, structured markdown block designed to be read by a Prose-Complete VM agent before execution. It contains pre-parsed contract, service resolution, feature flags, and diagnostic summary — putting the agent in compiler headspace with deterministic structural analysis.
+
+```
+<!-- openprose-lint briefing v1 -->
+## example-job-daily
+kind: program | services: 4 | imports: 3
+
+### contract
+requires:
+- company_name: the fleet operator to research
+- gate_level: (optional, default "external") review level
+ensures:
+- brief, delivered, dashboard_updated
+errors: (none)
+environment:
+- SLACK_WEBHOOK_URL
+- SLACK_BOT_TOKEN
+- REVIEW_CHANNEL
+
+### services
+example-discovery → inline
+human-gate → use: std/delivery/human-gate
+slack-notifier → use: std/delivery/slack-notifier
+dashboard-builder → use: std/delivery/dashboard-builder
+
+### features
+environment: yes | use-imports: yes | run-inputs: no | execution-block: yes
+
+### diagnostics
+0 errors, 0 warnings
+```
+
+See `docs/specs/2026-04-08-preflight-briefing-design.md` for the full design spec.
+
+### Design docs and guides
+
+- `docs/README.md` — map of maintainer docs and retention rules
+- `docs/specs/2026-04-08-preflight-briefing-design.md` — deterministic VM preflight schema
+- `docs/specs/2026-04-15-runtime-conformance-model.md` — terminology, capability profiles, and certification model for OpenProse runtimes
+- `docs/specs/2026-04-16-adapter-manifest-model.md` — deterministic coding-agent initialization model for OpenProse adapters
+- `docs/adapting-and-self-verifying-a-runtime.md` — practical workflow for adapting a new CLI, dogfooding it in tmux, and externally verifying runtime support claims without overclaiming completeness
+- `specs/conformance-capability-schema.json` — machine-readable capability vocabulary, profile definitions, and dependency graph (vocab v0.1.0)
+- `specs/adapter-manifest-schema.json` — machine-readable adapter manifest schema for deterministic initialization
+- `specs/runtime-subjects/` — example self-declared runtime capability manifests
+- `specs/adapters/` — example deterministic adapter manifests for Pi, Codex CLI, and Claude Code
+
+## Reference Spec
+
+The linter vendors `openprose/prose` as a git submodule:
+
+- submodule: `reference/openprose-prose`
+- VM spec: `reference/openprose-prose/skills/open-prose/prose.md`
+- Forme spec: `reference/openprose-prose/skills/open-prose/forme.md`
+- Deps spec: `reference/openprose-prose/skills/open-prose/deps.md`
+- pin: see `specs/openprose.json`
+
+Build-time vocabulary extraction reads the legacy v0 compiler spec at `reference/openprose-prose/skills/open-prose/v0/compiler.md` during `cargo build` and generates `spec_vocab.rs`. Bump the submodule to update: `cd reference/openprose-prose && git fetch origin && git checkout origin/main && cd ../..`
+
+## Profiles
+
+- `compat` (default): accepts current syntax plus known historical corpus patterns
+- `strict`: also flags spec deviations that `compat` tolerates, such as missing frontmatter `version` fields. Warnings do not fail the run.
+
+```bash
+openprose-lint lint --profile strict path/to/program.md
+```
+
+### Legacy compatibility
+
+OpenProse previously used an imperative `.prose` format. Most new users should ignore it, but archived programs can still be checked explicitly. Do not document or depend on private generation-suffixed aliases; use the public commands below.
+
+```bash
+openprose-lint lint-legacy path/to/file.prose
+```
+
+## Exit Codes
+
+- `0`: no lint errors
+- `1`: one or more lint errors
+- `2`: CLI usage or filesystem error
+
+Warnings do not fail the run.
+
+## Lint Rules
+
+Errors:
+
+- `MDE001`–`MDE009`: structural (frontmatter delimiters)
+- `MDE010`–`MDE019`: required frontmatter fields
+- `MDE020`–`MDE029`: body structure
+- `MDE030`–`MDE039`: component validation
+- `MDE040`–`MDE049`: cross-validation (single-file)
+- `MDE050`–`MDE059`: cross-validation (multi-file)
+
+Warnings:
+
+- `MDW001`–`MDW009`: frontmatter vocabulary
+- `MDW010`–`MDW019`: contract quality
+- `MDW020`–`MDW029`: component quality
+- `MDW030`–`MDW039`: cross-validation warnings
+
+## Architecture
+
+The public `lint` command targets the current declarative Markdown language. A legacy path remains for archived imperative `.prose` programs:
+
+- **Current Markdown linting**: parses `.md` programs, including heading classification, contract parsing (`## Contract` and bare labels), service resolution, and `use:` import awareness. This is exposed as `openprose-lint lint`.
+- **Legacy compatibility linting**: parses archived `.prose` files. Vocabulary is extracted from the legacy v0 compiler spec at build time via `build.rs` -> `spec_vocab.rs`. This is exposed as `openprose-lint lint-legacy`.
+- **Briefing generation**: reuses the current Markdown parser to produce structured preflight analysis for VM agents.
+- **`capabilities.rs`**: infers runtime capability requirements from a program, emits implied substrate dependencies, and can compare them against a runtime manifest.
+- **`adapter.rs`**: validates deterministic adapter manifests that pin exact OpenProse files, channels, and phase attachments.
+- **`adapter_dogfood.rs`**: turns the pinned Claude Code adapter into a repeatable live proof run by rendering the exact prompts/files, staging a temp program copy, validating the root VM's final JSON proof payloads, checking reported published outputs on disk, surfacing observed hook/tool-use evidence, and verifying the expected published binding is actually present and non-empty.
+
+## Editor support
+
+- **LSP:** `cargo build` also produces an `openprose-lsp` language-server binary for editor diagnostics (live lint + hover).
+- **WASM:** the linter library compiles to WebAssembly (`cargo build --target wasm32-unknown-unknown --lib`); `src/wasm.rs` exports `lint`/`hover` for embedding in external editors and tools. It has no in-repo consumer and `scripts/ci.sh` only compiles it, so treat it as a stable but lightly maintained integration surface.
+
+## Development
+
+Verification runs as a local gate, not GitHub Actions: `bash scripts/ci.sh` runs fmt, installs the pinned Bun tooling, runs `true-up gate` and a spec-hygiene check, then runs clippy, tests, build, and the conformance + lint smoke checks. Activate the pre-push hook with `git config core.hooksPath .githooks`. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Project Home
+
+This is an official OpenProse project at [github.com/openprose/prose-lint](https://github.com/openprose/prose-lint). It lints the OpenProse language defined at [github.com/openprose/prose](https://github.com/openprose/prose).
+
+## License
+
+MIT — see [LICENSE](LICENSE).

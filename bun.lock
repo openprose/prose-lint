@@ -1,0 +1,14 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "devDependencies": {
+        "true-up": "0.1.3",
+      },
+    },
+  },
+  "packages": {
+    "true-up": ["true-up@0.1.3", "", { "peerDependencies": { "tree-sitter-wasms": "0.1.13", "web-tree-sitter": "0.24.7" }, "optionalPeers": ["tree-sitter-wasms", "web-tree-sitter"], "bin": { "true-up": "bin/true-up" } }, "sha512-JG8WXRiFNZckDVJYnWaWWP39SohhjRcu0nN060w2lIM4HJwUTFFNce3qIOWesV/1BE9Q5uSgjY1FOGNdv1m6LQ=="],
+  }
+}

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# pre-push hook for openprose-lint.
+#
+# There is no GitHub Actions for this repo; scripts/ci.sh is the CI gate.
+# This hook simply runs that gate before every push.
+#
+# Escape hatch: set OPENPROSE_SKIP_PUSH_HOOK=1 to skip the gate on push.
+
+if [[ "${OPENPROSE_SKIP_PUSH_HOOK:-}" == "1" ]]; then
+  echo "[pre-push] OPENPROSE_SKIP_PUSH_HOOK=1, skipping checks"
+  exit 0
+fi
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+exec bash scripts/ci.sh

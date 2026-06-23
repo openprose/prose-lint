@@ -1,0 +1,470 @@
+{
+  "_comment": "true-up config. Declare steward facts, zones, and declared (seed) edges. See docs/CONFIG.md.",
+  "facts": {
+    "specs/conformance/manifest.json": [
+      [
+        "cases",
+        "id"
+      ]
+    ]
+  },
+  "strictSpans": true,
+  "zones": [
+    {
+      "path": "private/",
+      "visibility": "private",
+      "audience": "team",
+      "intent": "encrypted-notes",
+      "rules": [
+        "must-be-ciphertext"
+      ]
+    },
+    {
+      "path": "AGENTS.md",
+      "visibility": "public",
+      "audience": "maintainer-agents",
+      "intent": "repo-agent-instructions",
+      "rules": [
+        "no-machine-local-paths"
+      ]
+    },
+    {
+      "path": "docs/AGENTS.md",
+      "visibility": "public",
+      "audience": "maintainer-agents",
+      "intent": "docs-agent-instructions",
+      "rules": [
+        "no-machine-local-paths"
+      ]
+    },
+    {
+      "path": "specs/AGENTS.md",
+      "visibility": "public",
+      "audience": "maintainer-agents",
+      "intent": "spec-agent-instructions",
+      "rules": [
+        "no-machine-local-paths"
+      ]
+    },
+    {
+      "path": "**/SKILL.md",
+      "visibility": "public",
+      "audience": "external-agents",
+      "intent": "loadable-skill",
+      "rules": [
+        "no-machine-local-paths"
+      ]
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "visibility": "public",
+      "audience": "contributors",
+      "intent": "contributor-guide",
+      "rules": [
+        "no-machine-local-paths"
+      ]
+    },
+    {
+      "path": "CHANGELOG.md",
+      "visibility": "public",
+      "audience": "users",
+      "intent": "release-history",
+      "rules": [
+        "no-machine-local-paths"
+      ]
+    },
+    {
+      "path": "README.md",
+      "visibility": "public",
+      "audience": "users",
+      "intent": "user-overview",
+      "rules": [
+        "no-machine-local-paths"
+      ]
+    },
+    {
+      "path": "docs/",
+      "visibility": "public",
+      "audience": "maintainers",
+      "intent": "design-and-process-docs",
+      "rules": [
+        "no-machine-local-paths"
+      ]
+    },
+    {
+      "path": "specs/",
+      "visibility": "public",
+      "audience": "runtime-integrators",
+      "intent": "machine-readable-specs",
+      "rules": [
+        "no-machine-local-paths"
+      ]
+    },
+    {
+      "path": "package.json",
+      "visibility": "public",
+      "audience": "maintainers",
+      "intent": "node-tooling-manifest",
+      "rules": [
+        "no-machine-local-paths"
+      ]
+    },
+    {
+      "path": "bun.lock",
+      "visibility": "public",
+      "audience": "maintainers",
+      "intent": "node-tooling-lockfile",
+      "rules": [
+        "no-machine-local-paths"
+      ]
+    },
+    {
+      "path": "",
+      "visibility": "public",
+      "audience": "world",
+      "intent": "public-default",
+      "rules": [
+        "no-machine-local-paths",
+        "no-public->private-deps"
+      ]
+    }
+  ],
+  "seed": [
+    {
+      "from": "AGENTS.md",
+      "to": "docs/doctrine.md",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "CHANGELOG.md",
+      "to": "package.json",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "CHANGELOG.md",
+      "to": "scripts/ci.sh",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "CHANGELOG.md",
+      "to": "src/bin/lsp.rs",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "CHANGELOG.md",
+      "to": "src/cli.rs#command-surface",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "CHANGELOG.md",
+      "to": "src/current_lint.rs",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "CHANGELOG.md",
+      "to": "src/lsp.rs",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "CHANGELOG.md",
+      "to": "src/main.rs",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "CHANGELOG.md",
+      "to": "src/wasm.rs",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "AGENTS.md",
+      "to": "README.md",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "AGENTS.md",
+      "to": "package.json",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "AGENTS.md",
+      "to": "scripts/ci.sh",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "CONTRIBUTING.md",
+      "to": "Cargo.toml",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "CONTRIBUTING.md",
+      "to": "README.md",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "CONTRIBUTING.md",
+      "to": "package.json",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "CONTRIBUTING.md",
+      "to": "scripts/ci.sh",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "CONTRIBUTING.md",
+      "to": "specs/openprose.json",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "CONTRIBUTING.md",
+      "to": "src/cli.rs#command-surface",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "README.md",
+      "to": "Cargo.toml",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "README.md",
+      "to": "docs/README.md",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "README.md",
+      "to": "scripts/ci.sh",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "README.md",
+      "to": "specs/adapter-manifest-schema.json",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "README.md",
+      "to": "specs/conformance-capability-schema.json",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "README.md",
+      "to": "specs/conformance/manifest.json",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "README.md",
+      "to": "specs/openprose.json",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "README.md",
+      "to": "src/cli.rs#command-surface",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "README.md",
+      "to": "src/current_lint.rs",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "README.md",
+      "to": "src/lsp.rs",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "README.md",
+      "to": "src/wasm.rs",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "bun.lock",
+      "to": "package.json",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "docs/AGENTS.md",
+      "to": "docs/doctrine.md",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "docs/AGENTS.md",
+      "to": "docs/specs/2026-04-15-runtime-conformance-model.md",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "docs/AGENTS.md",
+      "to": "docs/specs/2026-04-16-adapter-manifest-model.md",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "docs/README.md",
+      "to": "docs/adapting-and-self-verifying-a-runtime.md",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "docs/README.md",
+      "to": "docs/doctrine.md",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "docs/README.md",
+      "to": "docs/spec-integration.md",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "docs/README.md",
+      "to": "docs/specs/2026-04-08-preflight-briefing-design.md",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "docs/README.md",
+      "to": "docs/specs/2026-04-15-runtime-conformance-model.md",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "docs/README.md",
+      "to": "docs/specs/2026-04-16-adapter-manifest-model.md",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "docs/adapting-and-self-verifying-a-runtime.md",
+      "to": "docs/specs/2026-04-15-runtime-conformance-model.md",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "docs/adapting-and-self-verifying-a-runtime.md",
+      "to": "docs/specs/2026-04-16-adapter-manifest-model.md",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "docs/spec-integration.md",
+      "to": "package.json",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "docs/spec-integration.md",
+      "to": "scripts/ci.sh",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "docs/spec-integration.md",
+      "to": "spec-support.json",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "docs/spec-integration.md",
+      "to": "specs/openprose.json",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "docs/spec-integration.md",
+      "to": "src/cli.rs#command-surface",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "docs/specs/2026-04-15-runtime-conformance-model.md",
+      "to": "specs/conformance-capability-schema.json",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "docs/specs/2026-04-16-adapter-manifest-model.md",
+      "to": "specs/adapter-manifest-schema.json",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "scripts/ci.sh",
+      "to": "package.json",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "scripts/ci.sh",
+      "to": "src/cli.rs#command-surface",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "specs/AGENTS.md",
+      "to": "docs/adapting-and-self-verifying-a-runtime.md",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "specs/AGENTS.md",
+      "to": "docs/doctrine.md",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "specs/AGENTS.md",
+      "to": "docs/specs/2026-04-15-runtime-conformance-model.md",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "specs/AGENTS.md",
+      "to": "docs/specs/2026-04-16-adapter-manifest-model.md",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "src/bin/lsp.rs",
+      "to": "src/lsp.rs",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "src/briefing.rs",
+      "to": "src/current_lint.rs",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "src/capabilities.rs",
+      "to": "src/current_lint.rs",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "src/lib.rs",
+      "to": "src/current_lint.rs",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "src/lsp.rs",
+      "to": "src/current_lint.rs",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "src/main.rs",
+      "to": "src/cli.rs#command-surface",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "src/wasm.rs",
+      "to": "src/current_lint.rs",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "tests/cli_help_tests.rs",
+      "to": "src/cli.rs#command-surface",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "tests/cli_help_tests.rs",
+      "to": "src/current_lint.rs",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "tests/lsp_minimal.rs",
+      "to": "src/current_lint.rs",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "tests/lsp_minimal.rs",
+      "to": "src/lsp.rs",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "tests/lsp_tests.rs",
+      "to": "src/current_lint.rs",
+      "kind": "derives-facts-from"
+    },
+    {
+      "from": "tests/lsp_tests.rs",
+      "to": "src/lsp.rs",
+      "kind": "derives-facts-from"
+    }
+  ],
+  "out": ".true-up/depgraph.json"
+}

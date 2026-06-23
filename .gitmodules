@@ -1,0 +1,3 @@
+[submodule "reference/openprose-prose"]
+	path = reference/openprose-prose
+	url = https://github.com/openprose/prose.git

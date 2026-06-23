@@ -1,0 +1,27 @@
+node_modules/
+dist/
+target/
+
+# Local tool/database state
+.codex
+*.db
+
+# Editor / OS cruft
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# true-up graph cache (gitignored; .true-up.json config is tracked)
+.true-up/
+
+# Adapter dogfood run artifacts
+.prose/
+
+# experiments/ — local design notes, not part of the public surface
+experiments/
+
+# Local pre-public audit artifact (names private projects; must not ship)
+/PRE-PUBLIC-AUDIT.md

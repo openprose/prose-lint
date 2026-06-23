@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "packageManager": "bun@1.3.12",
+  "scripts": {
+    "ci": "bash scripts/ci.sh",
+    "true-up": "true-up",
+    "true-up:status": "true-up status",
+    "true-up:gate": "true-up gate"
+  },
+  "devDependencies": {
+    "true-up": "0.1.3"
+  }
+}
