@@ -32,6 +32,10 @@ fn top_level_help_exits_successfully() {
         stderr.contains("openprose-lint adapter dogfood"),
         "stderr: {stderr}"
     );
+    assert!(
+        stderr.contains("openprose-lint specs verify"),
+        "stderr: {stderr}"
+    );
     assert!(stderr.contains("--test-root path"), "stderr: {stderr}");
 }
 
@@ -184,4 +188,19 @@ fn adapter_help_exits_successfully() {
         stderr.contains("openprose-lint adapter dogfood <manifest.json> <program-path>"),
         "stderr: {stderr}"
     );
+}
+
+#[test]
+fn specs_help_exits_successfully() {
+    let output = run(&["specs", "--help"]);
+    assert!(output.status.success(), "status: {:?}", output.status);
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("openprose-lint specs"), "stderr: {stderr}");
+    assert!(
+        stderr.contains("openprose-lint specs verify"),
+        "stderr: {stderr}"
+    );
+    assert!(stderr.contains("--expect-repo repo"), "stderr: {stderr}");
+    assert!(stderr.contains("--package-json path"), "stderr: {stderr}");
 }

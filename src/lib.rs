@@ -23,6 +23,8 @@ pub mod release;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod spec;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod spec_identity;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod spec_source;
 
 #[cfg(target_arch = "wasm32")]

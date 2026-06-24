@@ -75,6 +75,14 @@ openprose-lint conformance
 
 # List available spec sources
 openprose-lint specs
+
+# Verify a spec identity manifest against hashes, a git pin, and package provenance
+openprose-lint specs verify --manifest path/to/spec-version.json \
+  --root path/to/skill/open-prose \
+  --git-repo path/to/prose-checkout \
+  --expect-repo openprose/prose \
+  --expect-commit <git-sha> \
+  --package-json path/to/node_modules/@openprose/reactor/package.json
 ```
 
 The public linting surface is intentionally small: `lint` for current Markdown programs and
@@ -140,6 +148,60 @@ The linter vendors `openprose/prose` as a git submodule:
 - pin: see `specs/openprose.json`
 
 Build-time vocabulary extraction reads the legacy v0 compiler spec at `reference/openprose-prose/skills/open-prose/v0/compiler.md` during `cargo build` and generates `spec_vocab.rs`. Bump the submodule to update: `cd reference/openprose-prose && git fetch origin && git checkout origin/main && cd ../..`
+
+### Spec Identity
+
+`openprose-lint specs verify` checks a spec identity manifest without relying on
+package version alone. The manifest records:
+
+- the OpenProse spec id and source repo,
+- the OpenProse skill version and `runtime_contract`,
+- optional package provenance such as `@openprose/reactor` versions,
+- SHA-256 digests for the load-bearing skill/spec files.
+
+Package versions are labels; artifact hashes and the pinned git checkout are the
+contract. Direct manifest mode works for package bundles, scratch checkouts, and
+release candidates:
+
+```bash
+openprose-lint specs verify --manifest skill/open-prose/spec-version.json \
+  --root skill/open-prose \
+  --expect-repo openprose/prose \
+  --package-json package.json
+```
+
+If a manifest declares package versions, pass matching `--package-json` paths for
+each declared package. Otherwise verification fails rather than treating package
+provenance as implicitly checked.
+
+For git-pinned source checks, pass the checkout, expected repo, and expected
+commit explicitly:
+
+```bash
+openprose-lint specs verify --manifest skills/open-prose/spec-version.json \
+  --root skills/open-prose \
+  --git-repo . \
+  --expect-repo openprose/prose \
+  --expect-commit "$(git rev-parse HEAD)"
+```
+
+When a spec registry entry declares `paths.version_manifest`, `--spec` mode uses
+that registry repo and pin as the expected source identity:
+
+```bash
+openprose-lint specs verify --spec openprose
+```
+
+The manifest may omit `source.commit` when it is committed inside the same git
+tree; the external pin from `--expect-commit` or `specs/openprose.json` avoids a
+self-referential commit hash. Packaged bundles may include `source.commit`
+because the package is assembled after the source commit exists.
+
+When `--git-repo` is supplied, `--root` must live inside that checkout. The
+verifier also reads `SKILL.md` frontmatter and checks that its `version` and
+`runtime_contract` match the manifest. Git-pinned checks compare each artifact
+digest to the blob stored at the expected commit, so uncommitted worktree bytes
+cannot masquerade as pinned source.
 
 ## Profiles
 

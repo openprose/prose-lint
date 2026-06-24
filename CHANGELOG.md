@@ -39,6 +39,12 @@ Pre-public readiness pass ahead of open-sourcing under the OpenProse org.
 - Vendored conformance suite at `specs/conformance/` (a `manifest.json` plus
   six `.prose` cases) so `cargo run -- conformance` runs offline against fixed,
   in-repo expectations.
+- `specs verify`, a deterministic spec identity verifier for package bundles and
+  git-pinned checkouts. It checks an `openprose.spec-identity` manifest against
+  SHA-256 artifact hashes, complete package.json provenance for declared
+  packages, trusted repo identity, SKILL metadata, checkout root ownership, and
+  artifact blobs from an external expected git commit. It also enforces the
+  required load-bearing artifact surface for the declared `runtime_contract`.
 - Git pre-push hook (`.githooks/pre-push`) that delegates to `scripts/ci.sh`.
   Contributors activate it with `git config core.hooksPath .githooks`.
 - `LICENSE` (MIT, "Copyright (c) 2025-2026 OpenProse"), matching the

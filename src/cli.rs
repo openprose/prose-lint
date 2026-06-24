@@ -11,9 +11,10 @@ use crate::lint::{
 };
 use crate::profile::LintProfile;
 use crate::spec::{
-    conformance_manifest_for, default_spec_source, list_spec_sources,
-    reference_conformance_manifest, vendored_conformance_manifest,
+    conformance_manifest_for, default_spec_source, list_spec_sources, load_spec_source,
+    reference_conformance_manifest, repo_root, vendored_conformance_manifest,
 };
+use crate::spec_identity::{SpecIdentityOptions, verify_spec_identity};
 use anyhow::Result;
 use std::path::PathBuf;
 
@@ -98,6 +99,7 @@ fn print_usage() {
          openprose-lint adapter validate <manifest.json>\n  \
          openprose-lint adapter dogfood <manifest.json> <program-path> [--input name=value] [--input-file name=path] [--expect-binding service/output] [--test-root path]\n  \
          openprose-lint specs\n  \
+         openprose-lint specs verify [--spec name | --manifest path] [--root path] [--git-repo path] [--expect-repo repo] [--expect-commit sha] [--package-json path]\n  \
          \n  \
          Legacy:\n  \
          openprose-lint lint-legacy [--profile strict|compat] <file.prose-or-directory> [...]"
@@ -144,7 +146,11 @@ fn print_briefing_usage() {
 }
 
 fn print_specs_usage() {
-    eprintln!("Usage: openprose-lint specs");
+    eprintln!(
+        "Usage:\n  \
+         openprose-lint specs\n  \
+         openprose-lint specs verify [--spec name | --manifest path] [--root path] [--git-repo path] [--expect-repo repo] [--expect-commit sha] [--package-json path]"
+    );
 }
 
 fn run_legacy_lint(args: Vec<String>) -> Result<i32> {
@@ -568,6 +574,16 @@ fn run_specs_command(args: Vec<String>) -> Result<i32> {
         return Ok(0);
     }
 
+    if let Some((subcommand, rest)) = args.split_first() {
+        return match subcommand.as_str() {
+            "verify" => run_specs_verify(rest),
+            _ => {
+                print_specs_usage();
+                Ok(2)
+            }
+        };
+    }
+
     let specs = list_spec_sources()?;
     if specs.is_empty() {
         println!("No spec sources found. Create JSON files in specs/ directory.");
@@ -578,6 +594,135 @@ fn run_specs_command(args: Vec<String>) -> Result<i32> {
         println!("  {id}");
     }
     Ok(0)
+}
+
+fn run_specs_verify(args: &[String]) -> Result<i32> {
+    if args.iter().any(|arg| is_help_flag(arg)) {
+        print_specs_usage();
+        return Ok(0);
+    }
+
+    let mut spec_id = None;
+    let mut manifest = None;
+    let mut root = None;
+    let mut git_repo = None;
+    let mut expected_repo = None;
+    let mut expected_commit = None;
+    let mut package_jsons = Vec::new();
+    let mut iter = args.iter();
+
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--spec" => {
+                let Some(value) = iter.next() else {
+                    eprintln!("openprose-lint: missing value for --spec");
+                    return Ok(2);
+                };
+                spec_id = Some(value.clone());
+            }
+            "--manifest" => {
+                let Some(value) = iter.next() else {
+                    eprintln!("openprose-lint: missing value for --manifest");
+                    return Ok(2);
+                };
+                manifest = Some(PathBuf::from(value));
+            }
+            "--root" => {
+                let Some(value) = iter.next() else {
+                    eprintln!("openprose-lint: missing value for --root");
+                    return Ok(2);
+                };
+                root = Some(PathBuf::from(value));
+            }
+            "--git-repo" => {
+                let Some(value) = iter.next() else {
+                    eprintln!("openprose-lint: missing value for --git-repo");
+                    return Ok(2);
+                };
+                git_repo = Some(PathBuf::from(value));
+            }
+            "--expect-repo" => {
+                let Some(value) = iter.next() else {
+                    eprintln!("openprose-lint: missing value for --expect-repo");
+                    return Ok(2);
+                };
+                expected_repo = Some(value.clone());
+            }
+            "--expect-commit" => {
+                let Some(value) = iter.next() else {
+                    eprintln!("openprose-lint: missing value for --expect-commit");
+                    return Ok(2);
+                };
+                expected_commit = Some(value.clone());
+            }
+            "--package-json" => {
+                let Some(value) = iter.next() else {
+                    eprintln!("openprose-lint: missing value for --package-json");
+                    return Ok(2);
+                };
+                package_jsons.push(PathBuf::from(value));
+            }
+            _ => {
+                print_specs_usage();
+                return Ok(2);
+            }
+        }
+    }
+
+    if spec_id.is_some() && manifest.is_some() {
+        eprintln!("openprose-lint: --spec and --manifest are mutually exclusive");
+        return Ok(2);
+    }
+
+    let (manifest, options) = if let Some(id) = spec_id {
+        if root.is_some()
+            || git_repo.is_some()
+            || expected_repo.is_some()
+            || expected_commit.is_some()
+            || !package_jsons.is_empty()
+        {
+            eprintln!(
+                "openprose-lint: --spec supplies --root, --git-repo, --expect-repo, and --expect-commit from specs/<name>.json"
+            );
+            return Ok(2);
+        }
+        let spec = load_spec_source(&id)?;
+        let repo_root = repo_root();
+        let Some(manifest) = spec.resolve_version_manifest(&repo_root) else {
+            eprintln!("openprose-lint: spec source '{id}' has no version_manifest configured");
+            return Ok(2);
+        };
+        (
+            manifest,
+            SpecIdentityOptions {
+                root: Some(spec.resolve_root(&repo_root)),
+                git_repo: Some(repo_root.join(&spec.submodule_path)),
+                expected_repo: Some(spec.repo),
+                expected_commit: Some(spec.pinned_commit),
+                package_jsons: vec![],
+            },
+        )
+    } else {
+        let Some(manifest) = manifest else {
+            print_specs_usage();
+            return Ok(2);
+        };
+        (
+            manifest,
+            SpecIdentityOptions {
+                root,
+                git_repo,
+                expected_repo,
+                expected_commit,
+                package_jsons,
+            },
+        )
+    };
+
+    let report = verify_spec_identity(&manifest, options)?;
+    let exit_code = if report.valid { 0 } else { 1 };
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    Ok(exit_code)
 }
 
 fn run_briefing(args: Vec<String>) -> Result<i32> {
