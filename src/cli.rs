@@ -14,7 +14,9 @@ use crate::spec::{
     conformance_manifest_for, default_spec_source, list_spec_sources, load_spec_source,
     reference_conformance_manifest, repo_root, vendored_conformance_manifest,
 };
-use crate::spec_identity::{SpecIdentityOptions, verify_spec_identity};
+use crate::spec_identity::{
+    SpecIdentityOptions, verify_spec_identity, verify_spec_source_identity,
+};
 use anyhow::Result;
 use std::path::PathBuf;
 
@@ -689,8 +691,10 @@ fn run_specs_verify(args: &[String]) -> Result<i32> {
         let spec = load_spec_source(&id)?;
         let repo_root = repo_root();
         let Some(manifest) = spec.resolve_version_manifest(&repo_root) else {
-            eprintln!("openprose-lint: spec source '{id}' has no version_manifest configured");
-            return Ok(2);
+            let report = verify_spec_source_identity(&spec, &repo_root)?;
+            let exit_code = if report.valid { 0 } else { 1 };
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            return Ok(exit_code);
         };
         (
             manifest,

@@ -12,12 +12,13 @@ The integration contract is:
    - Forme: `skills/open-prose/forme.md`
    - deps: `skills/open-prose/deps.md`
    - legacy v0 compiler: `skills/open-prose/v0/compiler.md`
-5. If a spec identity manifest exists in the pinned spec, `paths.version_manifest`
-   points to it and `cargo run --bin openprose-lint -- specs verify --spec openprose`
-   verifies the manifest hashes, repo identity, root ownership, skill metadata,
-   and each artifact blob from the pinned submodule commit. The current pinned
-   `openprose` entry intentionally has no `paths.version_manifest`, so this
-   shortcut fails closed until the upstream spec ships the manifest.
+5. `cargo run --bin openprose-lint -- specs verify --spec openprose` verifies
+   repo identity, root ownership, and artifact blobs from the pinned submodule
+   commit. If the pinned spec ships a spec identity manifest,
+   `paths.version_manifest` points to it and the verifier checks the manifest
+   hashes, skill metadata, and package provenance. Without a manifest, the
+   verifier synthesizes a source-identity check from the registry-declared
+   load-bearing paths.
 6. `bun run true-up:gate` is the first repository-consistency gate after formatting.
 7. `cargo test` is the first Rust behavioral gate.
 8. `cargo run --bin openprose-lint -- lint --profile compat reference/openprose-prose/skills/open-prose/examples` is the smoke test for the current declarative example corpus. The public command surface intentionally exposes `lint` for current Markdown programs and `lint-legacy` for archived imperative programs; private generation-suffixed aliases are not valid commands.
@@ -35,11 +36,10 @@ The current CLI default remains `compat` to preserve the existing smoke-test wor
 1. Land spec changes in `openprose/prose`.
 2. Tag or otherwise identify the spec commit to pin.
 3. Bump the submodule in this repo to that commit.
-4. If the pinned spec ships `skills/open-prose/spec-version.json`, set
-   `paths.version_manifest` in `specs/openprose.json` and run
-   `cargo run --bin openprose-lint -- specs verify --spec openprose`. Until then,
-   keep `paths.version_manifest` unset so `--spec openprose` fails closed instead
-   of implying the pinned checkout has been identity-manifested.
+4. Run `cargo run --bin openprose-lint -- specs verify --spec openprose`. If the
+   pinned spec ships `skills/open-prose/spec-version.json`, set
+   `paths.version_manifest` in `specs/openprose.json`; otherwise the command
+   uses the registry-declared source-identity fallback.
 5. For package bundles, run `specs verify` in direct manifest mode with every
    declared package's `package.json`; package versions are provenance labels,
    while file hashes and the source identity are the contract.
@@ -54,7 +54,11 @@ The optional spec identity manifest has schema `openprose.spec-identity` and is
 verified by `openprose-lint specs verify`. It records the source repo, skill
 version, `runtime_contract`, optional package versions, and SHA-256 digests for
 load-bearing files such as `SKILL.md`, `contract-markdown.md`, `prose.md`, and
-`forme.md`.
+`forme.md`. Registry mode can also verify a pinned source without an upstream
+manifest by synthesizing the artifact set from `specs/openprose.json`; that
+fallback proves the checked-out source and declared artifact blobs, but it does
+not claim package provenance or skill metadata that the upstream manifest has not
+declared.
 
 A manifest committed inside `openprose/prose` should not need to contain its own
 git commit hash; that would be self-referential. The linter instead compares the

@@ -1,7 +1,8 @@
+use crate::spec_source::SpecSource;
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
@@ -133,10 +134,142 @@ pub fn verify_spec_identity(
     Ok(report)
 }
 
+pub fn verify_spec_source_identity(
+    spec: &SpecSource,
+    repo_root: &Path,
+) -> Result<SpecIdentityReport> {
+    let registry_path = repo_root.join("specs").join(format!("{}.json", spec.id));
+    let root = spec
+        .resolve_root(repo_root)
+        .canonicalize()
+        .with_context(|| format!("canonicalize spec root for {}", spec.id))?;
+    let git_repo = repo_root.join(&spec.submodule_path);
+    let mut report = SpecIdentityReport::new(registry_path, root.clone());
+
+    report.check(
+        "identity.mode",
+        true,
+        "registry-synthesized source identity; no upstream version_manifest configured",
+    );
+    report.check(
+        "source.repo.expected",
+        !spec.repo.trim().is_empty(),
+        format!("registry={}", spec.repo),
+    );
+
+    let toplevel = git_toplevel(&git_repo)?;
+    report.check(
+        "git.root",
+        root.starts_with(&toplevel),
+        format!(
+            "root={}, git_toplevel={}",
+            root.display(),
+            toplevel.display()
+        ),
+    );
+
+    let actual_head = git_head(&git_repo)?;
+    report.check(
+        "git.head",
+        actual_head == spec.pinned_commit,
+        format!("git HEAD={actual_head}, expected={}", spec.pinned_commit),
+    );
+
+    if !root.starts_with(&toplevel) {
+        return Ok(report);
+    }
+    let root_relative = root
+        .strip_prefix(&toplevel)
+        .with_context(|| format!("strip git root prefix from {}", root.display()))?;
+
+    for relative in registry_identity_artifacts(spec) {
+        let artifact_name = format!("artifact:{relative}");
+        let path = match checked_artifact_path(&root, &relative) {
+            Ok(path) => path,
+            Err(error) => {
+                report.check(artifact_name, false, error.to_string());
+                continue;
+            }
+        };
+        let live_digest = match artifact_digest(&path) {
+            Ok(digest) => {
+                report.check(
+                    artifact_name,
+                    true,
+                    format!("registry artifact digest {digest}"),
+                );
+                digest
+            }
+            Err(error) => {
+                report.check(artifact_name, false, error.to_string());
+                continue;
+            }
+        };
+
+        let git_name = format!("git.artifact:{relative}");
+        let worktree_relative = match safe_join(root_relative, &relative) {
+            Ok(path) => path,
+            Err(error) => {
+                report.check(git_name, false, error.to_string());
+                continue;
+            }
+        };
+        let git_path = match git_tree_path(&worktree_relative) {
+            Ok(path) => path,
+            Err(error) => {
+                report.check(git_name, false, error.to_string());
+                continue;
+            }
+        };
+        match git_blob_digest(&git_repo, &spec.pinned_commit, &git_path) {
+            Ok(actual) => report.check(
+                git_name,
+                digest_matches(&actual, &live_digest),
+                format!(
+                    "{}:{} expected {}, got {}",
+                    spec.pinned_commit, git_path, live_digest, actual
+                ),
+            ),
+            Err(error) => report.check(git_name, false, error.to_string()),
+        }
+    }
+
+    Ok(report)
+}
+
+fn registry_identity_artifacts(spec: &SpecSource) -> Vec<String> {
+    let mut artifacts = BTreeSet::new();
+    artifacts.insert("SKILL.md".to_string());
+    artifacts.insert(spec.paths.vm_spec.clone());
+    if let Some(path) = &spec.paths.compiler_spec {
+        artifacts.insert(path.clone());
+    } else {
+        artifacts.insert("v0/compiler.md".to_string());
+    }
+    if let Some(path) = &spec.paths.forme_spec {
+        artifacts.insert(path.clone());
+    }
+    if let Some(path) = &spec.paths.deps_spec {
+        artifacts.insert(path.clone());
+    }
+    artifacts.into_iter().collect()
+}
+
 pub fn artifact_digest(path: &Path) -> Result<String> {
     let bytes = read_artifact_bytes(path)?;
     let digest = Sha256::digest(&bytes);
     Ok(format!("sha256:{digest:x}"))
+}
+
+fn digest_matches(left: &str, right: &str) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+    let diff = left
+        .bytes()
+        .zip(right.bytes())
+        .fold(0_u8, |acc, (left, right)| acc | (left ^ right));
+    matches!(diff, 0)
 }
 
 fn read_artifact_bytes(path: &Path) -> Result<Vec<u8>> {
@@ -256,7 +389,7 @@ fn verify_artifacts(manifest: &SpecIdentityManifest, root: &Path, report: &mut S
         match artifact_digest(&path) {
             Ok(actual) => report.check(
                 name,
-                &actual == expected,
+                digest_matches(&actual, expected),
                 format!("expected {expected}, got {actual}"),
             ),
             Err(error) => report.check(name, false, error.to_string()),
@@ -471,7 +604,7 @@ fn verify_git_artifacts(
         match git_blob_digest(repo, expected_commit, &git_path) {
             Ok(actual) => report.check(
                 name,
-                &actual == expected,
+                digest_matches(&actual, expected),
                 format!("{expected_commit}:{git_path} expected {expected}, got {actual}"),
             ),
             Err(error) => report.check(name, false, error.to_string()),
@@ -658,7 +791,10 @@ fn git_head(repo: &Path) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{SpecIdentityOptions, artifact_digest, verify_spec_identity};
+    use super::{
+        SpecIdentityOptions, artifact_digest, verify_spec_identity, verify_spec_source_identity,
+    };
+    use crate::spec_source::{SpecPaths, SpecSource};
     use serde_json::json;
     use std::fs;
     use std::os::unix::fs as unix_fs;
@@ -668,6 +804,19 @@ mod tests {
 
     fn write_skill(root: &Path, contract_text: &str) {
         write_skill_with_metadata(root, "0.15.0", 2, contract_text);
+    }
+
+    fn write_registry_skill(root: &Path) {
+        fs::create_dir_all(root.join("v0")).unwrap();
+        fs::write(
+            root.join("SKILL.md"),
+            "---\nname: open-prose\ndescription: registry source\n---\n",
+        )
+        .unwrap();
+        fs::write(root.join("prose.md"), "Prose VM\n").unwrap();
+        fs::write(root.join("forme.md"), "Forme\n").unwrap();
+        fs::write(root.join("deps.md"), "Deps\n").unwrap();
+        fs::write(root.join("v0/compiler.md"), "Compiler\n").unwrap();
     }
 
     fn write_skill_with_metadata(
@@ -776,6 +925,24 @@ mod tests {
         git(repo, &["rev-parse", "HEAD"])
     }
 
+    fn registry_spec(commit: String) -> SpecSource {
+        SpecSource {
+            id: "openprose".to_string(),
+            repo: "openprose/prose".to_string(),
+            submodule_path: "reference/openprose-prose".to_string(),
+            pinned_commit: commit,
+            paths: SpecPaths {
+                root: "skills/open-prose".to_string(),
+                compiler_spec: Some("v0/compiler.md".to_string()),
+                vm_spec: "prose.md".to_string(),
+                forme_spec: Some("forme.md".to_string()),
+                deps_spec: Some("deps.md".to_string()),
+                version_manifest: None,
+                conformance_manifest: None,
+            },
+        }
+    }
+
     #[test]
     fn verifies_two_pinned_git_commits_without_manifest_self_reference() {
         let dir = tempdir().unwrap();
@@ -836,6 +1003,57 @@ mod tests {
                 .checks
                 .iter()
                 .any(|check| check.name == "git.head" && !check.passed)
+        );
+    }
+
+    #[test]
+    fn verifies_registry_source_identity_without_upstream_manifest() {
+        let dir = tempdir().unwrap();
+        let repo = dir.path().join("reference/openprose-prose");
+        let skill_root = repo.join("skills/open-prose");
+        git(dir.path(), &["init", "reference/openprose-prose"]);
+        git(&repo, &["config", "user.email", "agent@example.invalid"]);
+        git(&repo, &["config", "user.name", "Agent"]);
+        write_registry_skill(&skill_root);
+        let commit = commit(&repo, "registry source");
+        let spec = registry_spec(commit);
+
+        let report = verify_spec_source_identity(&spec, dir.path()).unwrap();
+        assert!(report.valid, "{report:#?}");
+        assert!(
+            report
+                .checks
+                .iter()
+                .any(|check| check.name == "identity.mode" && check.passed)
+        );
+        assert!(
+            report
+                .checks
+                .iter()
+                .any(|check| check.name == "git.artifact:v0/compiler.md" && check.passed)
+        );
+    }
+
+    #[test]
+    fn rejects_dirty_registry_source_identity_bytes_not_present_in_pinned_commit() {
+        let dir = tempdir().unwrap();
+        let repo = dir.path().join("reference/openprose-prose");
+        let skill_root = repo.join("skills/open-prose");
+        git(dir.path(), &["init", "reference/openprose-prose"]);
+        git(&repo, &["config", "user.email", "agent@example.invalid"]);
+        git(&repo, &["config", "user.name", "Agent"]);
+        write_registry_skill(&skill_root);
+        let commit = commit(&repo, "registry source");
+
+        fs::write(skill_root.join("prose.md"), "dirty prose\n").unwrap();
+        let spec = registry_spec(commit);
+        let report = verify_spec_source_identity(&spec, dir.path()).unwrap();
+        assert!(!report.valid, "{report:#?}");
+        assert!(
+            report
+                .checks
+                .iter()
+                .any(|check| check.name == "git.artifact:prose.md" && !check.passed)
         );
     }
 

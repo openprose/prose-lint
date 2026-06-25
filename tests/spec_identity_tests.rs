@@ -242,16 +242,42 @@ fn specs_verify_rejects_declared_package_without_package_json() {
 }
 
 #[test]
-fn specs_verify_named_openprose_fails_closed_without_registry_manifest() {
+fn specs_verify_named_openprose_uses_registry_identity_without_manifest() {
     let output = run(&["specs", "verify", "--spec", "openprose"]);
-    assert_eq!(output.status.code(), Some(2), "status: {:?}", output.status);
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stdout.trim().is_empty(), "stdout: {stdout}");
     assert!(
-        stderr.contains("spec source 'openprose' has no version_manifest configured"),
-        "stderr: {stderr}"
+        output.status.success(),
+        "status: {:?}\nstdout: {}\nstderr: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.trim().is_empty(), "stderr: {stderr}");
+    let json = parse_json(&output);
+    assert_eq!(json["valid"], true);
+    assert!(json["checks"].as_array().unwrap().iter().any(|check| {
+        check["name"] == "identity.mode"
+            && check["detail"]
+                .as_str()
+                .unwrap()
+                .contains("registry-synthesized source identity")
+    }));
+    assert!(
+        json["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| { check["name"] == "git.artifact:prose.md" && check["passed"] == true })
+    );
+    assert!(
+        json["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|check| { check["name"] == "artifact:SKILL.md" && check["passed"] == true }),
+        "stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
     );
 }
 

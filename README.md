@@ -185,11 +185,18 @@ openprose-lint specs verify --manifest skills/open-prose/spec-version.json \
   --expect-commit "$(git rev-parse HEAD)"
 ```
 
-When a spec registry entry declares `paths.version_manifest`, `--spec` mode uses
-that registry repo and pin as the expected source identity. The current pinned
-`openprose` registry entry does not declare one yet because the vendored spec
-does not ship a spec identity manifest; until it does, use direct manifest mode
-for package bundles and release candidates.
+`--spec` mode uses the registry repo and pin as the expected source identity.
+When the registry entry declares `paths.version_manifest`, the verifier reads
+that manifest. Otherwise it synthesizes a source-identity check from the
+registry-declared load-bearing paths and verifies those artifact blobs against
+the pinned submodule commit:
+
+```bash
+openprose-lint specs verify --spec openprose
+```
+
+Use direct manifest mode for package bundles and release candidates that need to
+verify package provenance such as `@openprose/reactor` versions.
 
 The manifest may omit `source.commit` when it is committed inside the same git
 tree; the external pin from `--expect-commit` or `specs/openprose.json` avoids a
