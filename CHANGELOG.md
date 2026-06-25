@@ -47,7 +47,9 @@ Pre-public readiness pass ahead of open-sourcing under the OpenProse org.
   required load-bearing artifact surface for the declared `runtime_contract`,
   rejects unknown future runtime contracts, rejects symlinked artifact paths, and
   can synthesize a registry-backed source identity for pinned specs that do not
-  ship an upstream identity manifest yet.
+  ship an upstream identity manifest yet. Registry fallback reports
+  non-failing source capabilities so future OpenProse source-layout changes are
+  visible without turning optional feature docs into required identity artifacts.
 - Git pre-push hook (`.githooks/pre-push`) that delegates to `scripts/ci.sh`.
   Contributors activate it with `git config core.hooksPath .githooks`.
 - `LICENSE` (MIT, "Copyright (c) 2025-2026 OpenProse"), matching the

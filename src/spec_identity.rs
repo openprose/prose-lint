@@ -53,12 +53,22 @@ pub struct SpecIdentityReport {
     pub manifest: PathBuf,
     pub root: PathBuf,
     pub checks: Vec<SpecIdentityCheck>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_capabilities: Vec<SpecSourceCapability>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct SpecIdentityCheck {
     pub name: String,
     pub passed: bool,
+    pub detail: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct SpecSourceCapability {
+    pub id: String,
+    pub path: String,
+    pub present: bool,
     pub detail: String,
 }
 
@@ -81,6 +91,7 @@ impl SpecIdentityReport {
             manifest,
             root,
             checks: Vec::new(),
+            source_capabilities: Vec::new(),
         }
     }
 
@@ -91,6 +102,21 @@ impl SpecIdentityReport {
         self.checks.push(SpecIdentityCheck {
             name: name.into(),
             passed,
+            detail: detail.into(),
+        });
+    }
+
+    fn source_capability(
+        &mut self,
+        id: impl Into<String>,
+        path: impl Into<String>,
+        present: bool,
+        detail: impl Into<String>,
+    ) {
+        self.source_capabilities.push(SpecSourceCapability {
+            id: id.into(),
+            path: path.into(),
+            present,
             detail: detail.into(),
         });
     }
@@ -156,6 +182,7 @@ pub fn verify_spec_source_identity(
         !spec.repo.trim().is_empty(),
         format!("registry={}", spec.repo),
     );
+    discover_registry_source_capabilities(spec, &root, &mut report);
 
     let toplevel = git_toplevel(&git_repo)?;
     report.check(
@@ -243,8 +270,6 @@ fn registry_identity_artifacts(spec: &SpecSource) -> Vec<String> {
     artifacts.insert(spec.paths.vm_spec.clone());
     if let Some(path) = &spec.paths.compiler_spec {
         artifacts.insert(path.clone());
-    } else {
-        artifacts.insert("v0/compiler.md".to_string());
     }
     if let Some(path) = &spec.paths.forme_spec {
         artifacts.insert(path.clone());
@@ -253,6 +278,105 @@ fn registry_identity_artifacts(spec: &SpecSource) -> Vec<String> {
         artifacts.insert(path.clone());
     }
     artifacts.into_iter().collect()
+}
+
+fn discover_registry_source_capabilities(
+    spec: &SpecSource,
+    root: &Path,
+    report: &mut SpecIdentityReport,
+) {
+    let mut capabilities = vec![
+        ("skill", "SKILL.md".to_string()),
+        ("vm", spec.paths.vm_spec.clone()),
+    ];
+    if let Some(path) = &spec.paths.compiler_spec {
+        capabilities.push(("compiler", path.clone()));
+    } else {
+        capabilities.push(("legacy_v0_compiler", "v0/compiler.md".to_string()));
+    }
+    if let Some(path) = &spec.paths.forme_spec {
+        capabilities.push(("forme", path.clone()));
+    }
+    if let Some(path) = &spec.paths.deps_spec {
+        capabilities.push(("deps", path.clone()));
+    }
+    capabilities.extend([
+        ("contract_markdown", "contract-markdown.md".to_string()),
+        ("prosescript", "prosescript.md".to_string()),
+        (
+            "responsibility_runtime",
+            "responsibility-runtime.md".to_string(),
+        ),
+        ("reactor", "reactor.md".to_string()),
+        ("examples", "examples".to_string()),
+    ]);
+
+    for (id, relative) in capabilities {
+        let (present, detail) = probe_source_capability(root, &relative);
+        report.source_capability(id, relative, present, detail);
+    }
+}
+
+fn probe_source_capability(root: &Path, relative: &str) -> (bool, String) {
+    let joined = match safe_join(root, relative) {
+        Ok(path) => path,
+        Err(error) => return (false, error.to_string()),
+    };
+
+    let mut current = root.to_path_buf();
+    for component in Path::new(relative).components() {
+        match component {
+            Component::Normal(part) => {
+                current.push(part);
+                let metadata = match fs::symlink_metadata(&current) {
+                    Ok(metadata) => metadata,
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        return (false, format!("missing {}", joined.display()));
+                    }
+                    Err(error) => return (false, format!("stat {}: {error}", current.display())),
+                };
+                if metadata.file_type().is_symlink() {
+                    return (
+                        false,
+                        format!(
+                            "capability path must not traverse a symlink: {}",
+                            current.display()
+                        ),
+                    );
+                }
+            }
+            Component::CurDir => {}
+            _ => return (false, format!("capability path escapes root: {relative}")),
+        }
+    }
+
+    let canonical = match joined.canonicalize() {
+        Ok(path) => path,
+        Err(error) => return (false, format!("canonicalize {}: {error}", joined.display())),
+    };
+    if !canonical.starts_with(root) {
+        return (
+            false,
+            format!(
+                "capability path resolves outside root: {} -> {}",
+                joined.display(),
+                canonical.display()
+            ),
+        );
+    }
+
+    let metadata = match fs::metadata(&joined) {
+        Ok(metadata) => metadata,
+        Err(error) => return (false, format!("stat {}: {error}", joined.display())),
+    };
+    let kind = if metadata.is_file() {
+        "file"
+    } else if metadata.is_dir() {
+        "directory"
+    } else {
+        "special"
+    };
+    (true, format!("{kind} {}", joined.display()))
 }
 
 pub fn artifact_digest(path: &Path) -> Result<String> {
@@ -819,6 +943,18 @@ mod tests {
         fs::write(root.join("v0/compiler.md"), "Compiler\n").unwrap();
     }
 
+    fn write_registry_skill_without_compiler(root: &Path) {
+        fs::create_dir_all(root).unwrap();
+        fs::write(
+            root.join("SKILL.md"),
+            "---\nname: open-prose\ndescription: registry source\n---\n",
+        )
+        .unwrap();
+        fs::write(root.join("prose.md"), "Prose VM\n").unwrap();
+        fs::write(root.join("forme.md"), "Forme\n").unwrap();
+        fs::write(root.join("deps.md"), "Deps\n").unwrap();
+    }
+
     fn write_skill_with_metadata(
         root: &Path,
         version: &str,
@@ -943,6 +1079,24 @@ mod tests {
         }
     }
 
+    fn registry_spec_without_compiler(commit: String) -> SpecSource {
+        SpecSource {
+            id: "openprose".to_string(),
+            repo: "openprose/prose".to_string(),
+            submodule_path: "reference/openprose-prose".to_string(),
+            pinned_commit: commit,
+            paths: SpecPaths {
+                root: "skills/open-prose".to_string(),
+                compiler_spec: None,
+                vm_spec: "prose.md".to_string(),
+                forme_spec: Some("forme.md".to_string()),
+                deps_spec: Some("deps.md".to_string()),
+                version_manifest: None,
+                conformance_manifest: None,
+            },
+        }
+    }
+
     #[test]
     fn verifies_two_pinned_git_commits_without_manifest_self_reference() {
         let dir = tempdir().unwrap();
@@ -1032,6 +1186,39 @@ mod tests {
                 .iter()
                 .any(|check| check.name == "git.artifact:v0/compiler.md" && check.passed)
         );
+        assert!(report.source_capabilities.iter().any(|capability| {
+            capability.id == "compiler" && capability.path == "v0/compiler.md" && capability.present
+        }));
+        assert!(
+            report
+                .source_capabilities
+                .iter()
+                .any(|capability| { capability.id == "contract_markdown" && !capability.present })
+        );
+    }
+
+    #[test]
+    fn registry_source_identity_does_not_require_undeclared_compiler_artifact() {
+        let dir = tempdir().unwrap();
+        let repo = dir.path().join("reference/openprose-prose");
+        let skill_root = repo.join("skills/open-prose");
+        git(dir.path(), &["init", "reference/openprose-prose"]);
+        git(&repo, &["config", "user.email", "agent@example.invalid"]);
+        git(&repo, &["config", "user.name", "Agent"]);
+        write_registry_skill_without_compiler(&skill_root);
+        let commit = commit(&repo, "registry source without compiler");
+        let spec = registry_spec_without_compiler(commit);
+
+        let report = verify_spec_source_identity(&spec, dir.path()).unwrap();
+        assert!(report.valid, "{report:#?}");
+        assert!(!report.checks.iter().any(|check| {
+            check.name == "artifact:v0/compiler.md" || check.name == "git.artifact:v0/compiler.md"
+        }));
+        assert!(report.source_capabilities.iter().any(|capability| {
+            capability.id == "legacy_v0_compiler"
+                && capability.path == "v0/compiler.md"
+                && !capability.present
+        }));
     }
 
     #[test]

@@ -189,7 +189,9 @@ openprose-lint specs verify --manifest skills/open-prose/spec-version.json \
 When the registry entry declares `paths.version_manifest`, the verifier reads
 that manifest. Otherwise it synthesizes a source-identity check from the
 registry-declared load-bearing paths and verifies those artifact blobs against
-the pinned submodule commit:
+the pinned submodule commit. The fallback also emits a non-failing
+`source_capabilities` section so source-layout changes show up as discovered
+feature docs instead of as implicit parser assumptions:
 
 ```bash
 openprose-lint specs verify --spec openprose

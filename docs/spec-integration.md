@@ -16,9 +16,11 @@ The integration contract is:
    repo identity, root ownership, and artifact blobs from the pinned submodule
    commit. If the pinned spec ships a spec identity manifest,
    `paths.version_manifest` points to it and the verifier checks the manifest
-   hashes, skill metadata, and package provenance. Without a manifest, the
-   verifier synthesizes a source-identity check from the registry-declared
-   load-bearing paths.
+   hashes and skill metadata. Manifests that declare package versions still
+   require direct manifest mode with matching `--package-json` inputs; otherwise
+   package provenance fails closed. Without a manifest, the verifier synthesizes
+   a source-identity check from the registry-declared load-bearing paths and
+   reports non-failing source capabilities for nearby OpenProse feature docs.
 6. `bun run true-up:gate` is the first repository-consistency gate after formatting.
 7. `cargo test` is the first Rust behavioral gate.
 8. `cargo run --bin openprose-lint -- lint --profile compat reference/openprose-prose/skills/open-prose/examples` is the smoke test for the current declarative example corpus. The public command surface intentionally exposes `lint` for current Markdown programs and `lint-legacy` for archived imperative programs; private generation-suffixed aliases are not valid commands.
@@ -56,9 +58,12 @@ version, `runtime_contract`, optional package versions, and SHA-256 digests for
 load-bearing files such as `SKILL.md`, `contract-markdown.md`, `prose.md`, and
 `forme.md`. Registry mode can also verify a pinned source without an upstream
 manifest by synthesizing the artifact set from `specs/openprose.json`; that
-fallback proves the checked-out source and declared artifact blobs, but it does
-not claim package provenance or skill metadata that the upstream manifest has not
-declared.
+fallback proves the checked-out source and declared artifact blobs, and reports
+source capabilities such as Contract Markdown, ProseScript, Responsibility
+Runtime, Reactor, and examples when those files are present. The capability
+report is informational: it helps future OpenProse source-layout changes become
+visible without claiming package provenance or skill metadata that the upstream
+manifest has not declared.
 
 A manifest committed inside `openprose/prose` should not need to contain its own
 git commit hash; that would be self-referential. The linter instead compares the
