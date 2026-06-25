@@ -165,10 +165,10 @@ mod tests {
             id: "openprose".to_string(),
             repo: "openprose/prose".to_string(),
             submodule_path: "reference/openprose-prose".to_string(),
-            pinned_commit: "d6e9c64c82a6c56d84b0f9923dd9b7a7e44f8dd5".to_string(),
+            pinned_commit: "ce98a960530c08329e129c7824c18813380ecdbd".to_string(),
             paths: SpecPaths {
                 root: "skills/open-prose".to_string(),
-                compiler_spec: Some("v0/compiler.md".to_string()),
+                compiler_spec: Some("compiler/index.prose.md".to_string()),
                 vm_spec: "prose.md".to_string(),
                 forme_spec: None,
                 deps_spec: None,
@@ -269,7 +269,7 @@ mod tests {
             "2026-03-19T15:00:00Z",
         );
 
-        assert_eq!(manifest.filename(), "v0.2.0-openprose-d6e9c64.json");
+        assert_eq!(manifest.filename(), "v0.2.0-openprose-ce98a96.json");
     }
 
     #[test]

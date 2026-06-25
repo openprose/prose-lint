@@ -24,6 +24,9 @@ git submodule update --init --recursive
   spec source — see `specs/openprose.json`). Don't add other spec sources/forks.
 - **Conformance:** vendored in-repo at `specs/conformance/` (manifest + cases).
   Run it with `cargo run -- conformance`.
+- **Language-surface invariant:** if a frontmatter `kind:` or other source type
+  has landed on `openprose/prose` main/master, `prose-lint` main/master must
+  support it. Treat lag here as a linter bug, not as user-corpus drift.
 
 ## Doctrine
 

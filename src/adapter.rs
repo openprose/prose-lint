@@ -458,7 +458,7 @@ mod tests {
   "subject": "broken test adapter",
   "source": "openprose/prose",
   "sourceUrl": "https://github.com/openprose/prose.git",
-  "spec_ref": "openprose/prose@d6e9c64c82a6c56d84b0f9923dd9b7a7e44f8dd5",
+  "spec_ref": "openprose/prose@ce98a960530c08329e129c7824c18813380ecdbd",
   "skill_root": "skills/open-prose",
   "supported_program_formats": ["v1-multi-service"],
   "phases": {

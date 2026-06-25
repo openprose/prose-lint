@@ -182,20 +182,30 @@ fn build_report(
     });
     let executable_kind = matches!(
         frontmatter.kind.as_deref(),
-        Some("program") | Some("program-node") | Some("service") | Some("test")
+        Some("responsibility")
+            | Some("function")
+            | Some("gateway")
+            | Some("test")
+            | Some("program")
+            | Some("program-node")
+            | Some("service")
     );
     let core_runtime = executable_kind || has_calls || !frontmatter.nodes.is_empty();
-    let dependency_scheduling = matches!(frontmatter.kind.as_deref(), Some("test"))
-        || !frontmatter.nodes.is_empty()
+    let dependency_scheduling = matches!(
+        frontmatter.kind.as_deref(),
+        Some("responsibility") | Some("gateway") | Some("test")
+    ) || !frontmatter.nodes.is_empty()
         || has_calls;
     let run_inputs = requirements.iter().any(|item| is_run_input(item));
     let ask_user = !requirements.is_empty();
     let test_execution = matches!(frontmatter.kind.as_deref(), Some("test"));
     let test_evaluation = test_execution
-        && source.lines().any(|line| {
-            let trimmed = line.trim_start().to_ascii_lowercase();
-            trimmed.starts_with("expects:") || trimmed.starts_with("expects-not:")
-        });
+        && (!sections.expects.is_empty()
+            || !sections.expects_not.is_empty()
+            || source.lines().any(|line| {
+                let trimmed = line.trim_start().to_ascii_lowercase();
+                trimmed.starts_with("expects:") || trimmed.starts_with("expects-not:")
+            }));
     let delegation = frontmatter.all_keys.contains_key("delegates")
         || source.contains("\nDelegate:")
         || source.starts_with("Delegate:")
@@ -525,11 +535,13 @@ fn resolve_program_target(target: &Path) -> Result<PathBuf> {
         bail!("target does not exist: {}", target.display());
     }
 
-    let index = target.join("index.md");
-    if index.is_file() {
-        return index
-            .canonicalize()
-            .with_context(|| format!("canonicalize {}", index.display()));
+    for index_name in ["index.prose.md", "index.md"] {
+        let index = target.join(index_name);
+        if index.is_file() {
+            return index
+                .canonicalize()
+                .with_context(|| format!("canonicalize {}", index.display()));
+        }
     }
 
     let mut candidates = Vec::new();
@@ -542,27 +554,45 @@ fn resolve_program_target(target: &Path) -> Result<PathBuf> {
             fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
         let mut diagnostics = Vec::new();
         let (frontmatter, _) = parse_frontmatter(&path, &source, &mut diagnostics);
-        if matches!(frontmatter.kind.as_deref(), Some("program") | Some("test")) {
+        if matches!(
+            frontmatter.kind.as_deref(),
+            Some("responsibility")
+                | Some("function")
+                | Some("gateway")
+                | Some("test")
+                | Some("program")
+        ) {
             candidates.push(path);
         }
     }
 
     match candidates.len() {
         0 => bail!(
-            "could not find an index.md or program/test root in {}",
+            "could not find an index.prose.md, index.md, or OpenProse root in {}",
             target.display()
         ),
         1 => candidates[0]
             .canonicalize()
             .with_context(|| format!("canonicalize {}", candidates[0].display())),
         _ => bail!(
-            "multiple program/test roots found in {}; pass a file path instead",
+            "multiple OpenProse roots found in {}; pass a file path instead",
             target.display()
         ),
     }
 }
 
 fn caller_requirements(frontmatter: &Frontmatter, sections: &ContractSections) -> Vec<String> {
+    if frontmatter.kind.as_deref() == Some("test") {
+        return Vec::new();
+    }
+    if !sections.parameters.is_empty() {
+        return sections
+            .parameters
+            .iter()
+            .map(|item| item.text.trim().to_string())
+            .filter(|item| !item.is_empty())
+            .collect();
+    }
     if !sections.requires.is_empty() {
         return sections
             .requires
@@ -670,13 +700,26 @@ mod tests {
 
     #[test]
     fn infers_test_execution_and_evaluation() {
-        let source =
-            include_str!("../reference/openprose-prose/skills/open-prose/examples/test-demo.md");
-        let report = capability_report_from_source(
-            Path::new("reference/openprose-prose/skills/open-prose/examples/test-demo.md"),
-            source,
-        )
-        .unwrap();
+        let source = r#"---
+name: test-summarizer
+kind: test
+subject: summarizer
+---
+
+### Fixtures
+
+- `topic`: recent developments in quantum error correction
+
+### Expects
+
+- `summary`: covers at least three concrete developments
+
+### Expects Not
+
+- `summary`: invents citations
+"#;
+        let report =
+            capability_report_from_source(Path::new("test-summarizer.prose.md"), source).unwrap();
 
         assert_eq!(report.program, "test-summarizer");
         assert!(report.requires.test_execution);
@@ -688,13 +731,22 @@ mod tests {
 
     #[test]
     fn infers_project_persistence_from_frontmatter() {
-        let source =
-            include_str!("../reference/openprose-prose/skills/open-prose/lib/project-memory.md");
-        let report = capability_report_from_source(
-            Path::new("reference/openprose-prose/skills/open-prose/lib/project-memory.md"),
-            source,
-        )
-        .unwrap();
+        let source = r#"---
+name: project-memory
+kind: function
+persist: project
+---
+
+### Parameters
+
+- `topic`: memory topic
+
+### Returns
+
+- `memory`: durable project memory
+"#;
+        let report =
+            capability_report_from_source(Path::new("project-memory.prose.md"), source).unwrap();
 
         assert!(report.requires.persistence_project);
         assert!(!report.requires.persistence_execution);

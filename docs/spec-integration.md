@@ -11,7 +11,7 @@ The integration contract is:
    - Prose VM: `skills/open-prose/prose.md`
    - Forme: `skills/open-prose/forme.md`
    - deps: `skills/open-prose/deps.md`
-   - legacy v0 compiler: `skills/open-prose/v0/compiler.md`
+   - compiler: `skills/open-prose/compiler/index.prose.md`
 5. `cargo run --bin openprose-lint -- specs verify --spec openprose` verifies
    repo identity, root ownership, and artifact blobs from the pinned submodule
    commit. If the pinned spec ships a spec identity manifest,

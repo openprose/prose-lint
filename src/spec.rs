@@ -80,7 +80,7 @@ fn legacy_spec_source() -> SpecSource {
         pinned_commit: "unknown".to_string(),
         paths: SpecPaths {
             root: "skills/open-prose".to_string(),
-            compiler_spec: Some("v0/compiler.md".to_string()),
+            compiler_spec: Some("compiler/index.prose.md".to_string()),
             vm_spec: "prose.md".to_string(),
             forme_spec: Some("forme.md".to_string()),
             deps_spec: Some("deps.md".to_string()),

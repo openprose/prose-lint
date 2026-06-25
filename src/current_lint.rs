@@ -21,6 +21,8 @@ pub struct Frontmatter {
     pub name: Option<String>,
     pub kind: Option<String>,
     pub version: Option<String>,
+    pub id: Option<String>,
+    pub subject: Option<String>,
     pub nodes: Vec<String>,
     pub role: Option<String>,
     pub api: Vec<String>,
@@ -39,10 +41,16 @@ pub struct Frontmatter {
 pub(crate) struct ContractSections {
     pub(crate) requires: Vec<ContractItem>,
     pub(crate) ensures: Vec<ContractItem>,
+    pub(crate) maintains: Vec<ContractItem>,
+    pub(crate) parameters: Vec<ContractItem>,
+    pub(crate) returns: Vec<ContractItem>,
     pub(crate) errors: Vec<ContractItem>,
     pub(crate) invariants: Vec<ContractItem>,
     pub(crate) strategies: Vec<ContractItem>,
     pub(crate) environment: Vec<ContractItem>,
+    pub(crate) fixtures: Vec<ContractItem>,
+    pub(crate) expects: Vec<ContractItem>,
+    pub(crate) expects_not: Vec<ContractItem>,
 }
 
 #[derive(Clone, Debug)]
@@ -73,14 +81,23 @@ pub(crate) struct Heading {
     code_block_fields: HashSet<String>,
 }
 
-// ── Known vocabulary (from spec) ────────────────────────────────────────────
-// These are what the EMERGING_PROSE_SPEC.md explicitly documents.
+// ── Known vocabulary (from current OpenProse Contract Markdown) ─────────────
+//
+// Invariant: when a frontmatter kind lands on openprose/prose main, prose-lint
+// main must treat it as current spec vocabulary, not as corpus drift.
 
 const SPEC_FRONTMATTER_KEYS: &[&str] = &[
     "name",
     "kind",
     "version",
+    "id",
+    "subject",
+    "tier",
+    "contract_version",
     "description",
+];
+
+const LEGACY_FRONTMATTER_KEYS: &[&str] = &[
     "nodes",
     "services",
     "role",
@@ -97,17 +114,41 @@ const SPEC_FRONTMATTER_KEYS: &[&str] = &[
     "use",
 ];
 
-const SPEC_KINDS: &[&str] = &["program", "program-node", "service", "test"];
+const SPEC_KINDS: &[&str] = &["responsibility", "function", "gateway", "pattern", "test"];
+
+const LEGACY_KINDS: &[&str] = &["program", "program-node", "service", "system"];
 
 const SPEC_ROLES: &[&str] = &["orchestrator", "coordinator", "leaf"];
 
 pub(crate) const KNOWN_CONTRACT_SECTIONS: &[&str] = &[
+    "description",
+    "goal",
     "requires",
+    "maintains",
+    "parameters",
+    "returns",
+    "continuity",
     "ensures",
     "errors",
     "invariants",
     "strategies",
     "environment",
+    "runtime",
+    "skills",
+    "tools",
+    "shape",
+    "execution",
+    "fixtures",
+    "expects",
+    "expects not",
+    "expects-not",
+    "slots",
+    "config",
+    "delegation",
+    "schedule",
+    "receives",
+    "emits",
+    "payload",
 ];
 
 // ── Extended vocabulary (observed in press corpus, not yet in spec) ──────────
@@ -127,8 +168,6 @@ const CORPUS_FRONTMATTER_KEYS: &[&str] = &[
     "models",
     "drivers",
     "persist",
-    // Test wiring keys
-    "subject",
     // Code block field keys sometimes in frontmatter
     "capability",
     "principles",
@@ -193,7 +232,6 @@ fn current_lint_source_inner(
     let mut diagnostics = Vec::new();
 
     let (frontmatter, body_start) = parse_frontmatter(path, source, &mut diagnostics);
-    validate_frontmatter(path, &frontmatter, profile, &mut diagnostics);
 
     let body = if body_start < source.lines().count() {
         source
@@ -204,6 +242,15 @@ fn current_lint_source_inner(
     } else {
         String::new()
     };
+    let has_file_title = has_file_title(&body);
+
+    validate_frontmatter(
+        path,
+        &frontmatter,
+        has_file_title,
+        profile,
+        &mut diagnostics,
+    );
 
     let (headings, contract_sections) =
         parse_markdown_body(path, &body, body_start, &frontmatter, &mut diagnostics);
@@ -484,6 +531,7 @@ pub(crate) fn parse_frontmatter(
 
             // Check for unknown top-level keys
             if !SPEC_FRONTMATTER_KEYS.contains(&key)
+                && !LEGACY_FRONTMATTER_KEYS.contains(&key)
                 && !CORPUS_FRONTMATTER_KEYS.contains(&key)
                 && !key.contains(' ')
             {
@@ -547,6 +595,8 @@ fn apply_frontmatter_value(fm: &mut Frontmatter, key: &str, value: &str, items: 
         "name" => fm.name = Some(value.to_string()),
         "kind" => fm.kind = Some(value.to_string()),
         "version" => fm.version = Some(value.to_string()),
+        "id" => fm.id = Some(value.to_string()),
+        "subject" => fm.subject = Some(value.to_string()),
         "description" => fm.description = Some(value.to_string()),
         "role" => fm.role = Some(value.to_string()),
         "persist" => fm.persist = Some(value.to_string()),
@@ -581,11 +631,12 @@ fn apply_frontmatter_list(fm: &mut Frontmatter, key: &str, items: &[String]) {
 fn validate_frontmatter(
     path: &Path,
     fm: &Frontmatter,
+    has_file_title: bool,
     profile: LintProfile,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     // MDE010: missing name
-    if fm.name.is_none() {
+    if fm.name.is_none() && !has_file_title {
         diagnostics.push(Diagnostic::new(
             path,
             "MDE010",
@@ -608,16 +659,21 @@ fn validate_frontmatter(
         ));
     }
 
-    // MDE012: unknown kind (strict = error, compat = warning for corpus kinds)
+    // MDE012: unknown kind (strict = error, compat = warning for legacy/corpus kinds)
     if let Some(ref kind) = fm.kind
         && !SPEC_KINDS.contains(&kind.as_str())
     {
-        if CORPUS_KINDS.contains(&kind.as_str()) {
-            // In corpus but not in spec — warn in strict, skip in compat
+        if LEGACY_KINDS.contains(&kind.as_str()) || CORPUS_KINDS.contains(&kind.as_str()) {
+            // Historical but not current — warn in strict, skip in compat.
             if profile == LintProfile::Strict {
+                let origin = if LEGACY_KINDS.contains(&kind.as_str()) {
+                    "retired OpenProse vocabulary"
+                } else {
+                    "observed corpus vocabulary"
+                };
                 diagnostics.push(Diagnostic::new(
                         path, "MDW005", Severity::Warning,
-                        format!("Component kind `{kind}` is used in the Press corpus but not documented in the current spec"),
+                        format!("Component kind `{kind}` belongs to {origin}, not the current Contract Markdown spec"),
                         1, 1,
                     ));
             }
@@ -627,9 +683,14 @@ fn validate_frontmatter(
                 "MDE012",
                 Severity::Error,
                 format!(
-                    "Unknown component kind: `{kind}` (spec: {}; corpus: {})",
+                    "Unknown component kind: `{kind}` (current spec: {}; legacy/corpus: {})",
                     SPEC_KINDS.join(", "),
-                    CORPUS_KINDS.join(", ")
+                    LEGACY_KINDS
+                        .iter()
+                        .chain(CORPUS_KINDS.iter())
+                        .copied()
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ),
                 1,
                 1,
@@ -654,7 +715,7 @@ fn validate_frontmatter(
         ));
     }
 
-    // MDE013: program must have nodes/services
+    // MDE013: legacy program must have nodes/services
     if let Some(ref kind) = fm.kind
         && kind == "program"
         && fm.nodes.is_empty()
@@ -694,6 +755,27 @@ fn validate_frontmatter(
             1,
         ));
     }
+
+    // MDE014: current tests name a subject.
+    if fm.kind.as_deref() == Some("test") && fm.subject.is_none() {
+        diagnostics.push(Diagnostic::new(
+            path,
+            "MDE014",
+            Severity::Error,
+            "Test must declare `subject:` frontmatter",
+            1,
+            1,
+        ));
+    }
+}
+
+fn has_file_title(body: &str) -> bool {
+    body.lines().any(|line| {
+        let trimmed = line.trim_start();
+        trimmed
+            .strip_prefix("# ")
+            .is_some_and(|title| !title.trim().is_empty())
+    })
 }
 
 // ── Markdown Body Parsing ───────────────────────────────────────────────────
@@ -833,6 +915,12 @@ pub(crate) fn parse_markdown_body(
 
         // ### heading
         if let Some(heading_text) = trimmed.strip_prefix("### ") {
+            let heading_lower = heading_text.trim().to_lowercase();
+            if KNOWN_CONTRACT_SECTIONS.contains(&heading_lower.as_str()) {
+                current_section = Some(heading_lower);
+                continue;
+            }
+
             if let Some(h) = current_heading.take() {
                 headings.push(h);
             }
@@ -927,10 +1015,16 @@ fn push_contract_item(sections: &mut ContractSections, section: &str, item: Cont
     match section {
         "requires" => sections.requires.push(item),
         "ensures" => sections.ensures.push(item),
+        "maintains" => sections.maintains.push(item),
+        "parameters" => sections.parameters.push(item),
+        "returns" => sections.returns.push(item),
         "errors" => sections.errors.push(item),
         "invariants" => sections.invariants.push(item),
         "strategies" => sections.strategies.push(item),
         "environment" => sections.environment.push(item),
+        "fixtures" => sections.fixtures.push(item),
+        "expects" => sections.expects.push(item),
+        "expects not" | "expects-not" => sections.expects_not.push(item),
         _ => {}
     }
 }
@@ -969,6 +1063,32 @@ fn validate_contracts(
         }
     }
 
+    for item in &sections.maintains {
+        if item.text.trim().is_empty() {
+            diagnostics.push(Diagnostic::new(
+                path,
+                "MDW010",
+                Severity::Warning,
+                "Empty maintains clause",
+                item.line,
+                1,
+            ));
+        }
+    }
+
+    for item in &sections.returns {
+        if item.text.trim().is_empty() {
+            diagnostics.push(Diagnostic::new(
+                path,
+                "MDW010",
+                Severity::Warning,
+                "Empty returns clause",
+                item.line,
+                1,
+            ));
+        }
+    }
+
     // Hedging language in ensures
     for item in &sections.ensures {
         let lower = item.text.to_lowercase();
@@ -1000,7 +1120,7 @@ fn validate_contracts(
         }
     }
 
-    // MDW014: service/program-node without ensures (a component that guarantees nothing)
+    // MDW014: callable/mounted render without an output contract.
     let kind = fm.kind.as_deref().unwrap_or("");
     if (kind == "service" || kind == "program-node")
         && sections.ensures.is_empty()
@@ -1012,8 +1132,28 @@ fn validate_contracts(
             1, 1,
         ));
     }
+    if kind == "function" && sections.returns.is_empty() {
+        diagnostics.push(Diagnostic::new(
+            path,
+            "MDW014",
+            Severity::Warning,
+            "Function has no returns section",
+            1,
+            1,
+        ));
+    }
+    if (kind == "responsibility" || kind == "gateway") && sections.maintains.is_empty() {
+        diagnostics.push(Diagnostic::new(
+            path,
+            "MDW014",
+            Severity::Warning,
+            format!("Component of kind `{kind}` has no maintains section"),
+            1,
+            1,
+        ));
+    }
 
-    // MDW015: program without requires (inputs never specified)
+    // MDW015: legacy program without requires (inputs never specified)
     if kind == "program" && sections.requires.is_empty() && fm.requires.is_empty() {
         diagnostics.push(Diagnostic::new(
             path,
@@ -1457,9 +1597,20 @@ mod tests {
 
     #[test]
     fn missing_name() {
-        let source = "---\nkind: program\nnodes: [a]\n---\n# Test\n";
+        let source = "---\nkind: program\nnodes: [a]\n---\n\n### a\n";
         let result = current_lint_source(Path::new("test.md"), source);
         assert!(result.diagnostics.iter().any(|d| d.code == "MDE010"));
+    }
+
+    #[test]
+    fn file_title_is_name_fallback() {
+        let source = "---\nkind: responsibility\nid: fallback-title\n---\n# Fallback Title\n\n### Maintains\n\n- `state`: current state\n";
+        let result = current_lint_source(Path::new("test.md"), source);
+        assert!(
+            !result.diagnostics.iter().any(|d| d.code == "MDE010"),
+            "unexpected diagnostics: {:?}",
+            result.diagnostics
+        );
     }
 
     #[test]
@@ -1482,6 +1633,179 @@ mod tests {
         let result = current_lint_source(Path::new("test.md"), source);
         // No error in compat mode for corpus kinds
         assert!(!result.diagnostics.iter().any(|d| d.code == "MDE012"));
+    }
+
+    #[test]
+    fn current_openprose_kinds_are_accepted_in_strict() {
+        let cases = [
+            (
+                "responsibility",
+                "---\nname: risk-radar\nkind: responsibility\nversion: 0.15.0\nid: 067NC4KG01RG50R40M30E20918\n---\n\n### Requires\n\n- `signals`: account signals\n\n### Maintains\n\n- `risk`: current account risk\n",
+            ),
+            (
+                "function",
+                "---\nname: summarize\nkind: function\nversion: 0.15.0\n---\n\n### Parameters\n\n- `text`: input text\n\n### Returns\n\n- `summary`: concise summary\n",
+            ),
+            (
+                "gateway",
+                "---\nname: intake\nkind: gateway\nversion: 0.15.0\n---\n\n### Continuity\n\n- external-driven\n\n### Receives\n\n- POST /events\n\n### Maintains\n\n- `events`: latest incoming events\n\n### Emits\n\n- risk-radar\n",
+            ),
+            (
+                "pattern",
+                "---\nname: worker-critic\nkind: pattern\nversion: 0.15.0\n---\n\n### Slots\n\n- `worker`: produces a draft\n\n### Config\n\n- `max_rounds`: 3\n\n### Delegation\n\n```prose\ncall worker\n```\n",
+            ),
+            (
+                "test",
+                "---\nname: test-summarize\nkind: test\nversion: 0.15.0\nsubject: summarize\n---\n\n### Fixtures\n\n- `text`: input text\n\n### Expects\n\n- `summary`: exists\n\n### Expects Not\n\n- `summary`: invents citations\n",
+            ),
+        ];
+
+        for (kind, source) in cases {
+            let result = current_lint_source_with_profile(
+                Path::new("current.prose.md"),
+                source,
+                LintProfile::Strict,
+            );
+            assert!(
+                !result.diagnostics.iter().any(|d| d.code == "MDE012"),
+                "kind {kind} should be accepted: {:?}",
+                result.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn current_contract_sections_are_not_classified_as_components() {
+        let source = "\
+---
+name: current-sections
+kind: responsibility
+version: 0.15.0
+id: 067NC4KG01RG50R40M30E20918
+---
+
+### Description
+
+Human summary.
+
+### Goal
+
+Keep the account risk model current.
+
+### Requires
+
+- `signals`: account signals
+
+### Maintains
+
+- `risk`: current account risk
+
+#### score
+
+Material risk score.
+
+### Parameters
+
+- `ignored`: only valid for functions, but still a known section.
+
+### Returns
+
+- `ignored`: only valid for functions, but still a known section.
+
+### Continuity
+
+- input-driven
+
+### Errors
+
+- `missing-signals`: no input signals
+
+### Invariants
+
+- never expose secrets
+
+### Strategies
+
+- prefer corroborated signals
+
+### Environment
+
+- `API_TOKEN`: account API token
+
+### Runtime
+
+- `model`: sonnet
+
+### Skills
+
+- document-skills:pdf
+
+### Tools
+
+- `cli:gh`: GitHub CLI
+
+### Shape
+
+- `self`: score risk
+
+### Execution
+
+```prose
+return risk
+```
+
+### Fixtures
+
+- `signals`: fixture
+
+### Expects
+
+- `risk`: exists
+
+### Expects Not
+
+- `risk`: leaks secrets
+
+### Slots
+
+- `worker`: worker slot
+
+### Config
+
+- `max_rounds`: 3
+
+### Delegation
+
+```prose
+call worker
+```
+
+### Schedule
+
+- */5 * * * *
+
+### Receives
+
+- POST /events
+
+### Emits
+
+- current-sections
+
+### Payload
+
+- JSON event body
+";
+        let result = current_lint_source_with_profile(
+            Path::new("current-sections.prose.md"),
+            source,
+            LintProfile::Strict,
+        );
+        assert!(
+            !result.diagnostics.iter().any(|d| d.code == "MDW020"),
+            "current sections should not be fake components: {:?}",
+            result.diagnostics
+        );
     }
 
     #[test]
@@ -1723,23 +2047,23 @@ produces for caller:
     }
 
     #[test]
-    fn current_openprose_examples_lint_without_errors() {
-        let examples = crate::spec::reference_open_prose_root().join("examples");
+    fn openprose_main_source_surfaces_are_supported() {
+        let root = crate::spec::reference_open_prose_root();
         assert!(
-            examples.exists(),
-            "reference examples not found at {}",
-            examples.display()
+            root.exists(),
+            "reference OpenProse root not found at {}",
+            root.display()
         );
 
         let results = current_lint_paths_with_profile(
-            std::slice::from_ref(&examples),
-            crate::profile::LintProfile::Compat,
+            std::slice::from_ref(&root),
+            crate::profile::LintProfile::Strict,
         )
         .unwrap();
-        let errors: Vec<_> = results
+        let unsupported_surfaces: Vec<_> = results
             .iter()
             .flat_map(|result| result.diagnostics.iter())
-            .filter(|diagnostic| diagnostic.severity == Severity::Error)
+            .filter(|diagnostic| matches!(diagnostic.code, "MDE012" | "MDW001" | "MDW020"))
             .map(|diagnostic| {
                 format!(
                     "{}:{}:{} {} {}",
@@ -1752,6 +2076,9 @@ produces for caller:
             })
             .collect();
 
-        assert!(errors.is_empty(), "unexpected errors: {errors:#?}");
+        assert!(
+            unsupported_surfaces.is_empty(),
+            "OpenProse main contains source surfaces unsupported by prose-lint: {unsupported_surfaces:#?}"
+        );
     }
 }

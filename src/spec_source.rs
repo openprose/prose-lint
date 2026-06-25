@@ -103,14 +103,15 @@ impl SpecSource {
 
     /// Resolve absolute path to the compiler spec.
     ///
-    /// Current OpenProse checkouts keep the legacy v0 compiler under `v0/compiler.md`.
-    /// Older spec registries may still spell it explicitly as `compiler.md`.
+    /// Current OpenProse checkouts keep the compiler under `compiler/index.prose.md`.
+    /// Older spec registries may still spell it explicitly as `v0/compiler.md`
+    /// or `compiler.md`.
     pub fn resolve_compiler_spec(&self, repo_root: &Path) -> PathBuf {
         self.resolve_root(repo_root).join(
             self.paths
                 .compiler_spec
                 .as_deref()
-                .unwrap_or("v0/compiler.md"),
+                .unwrap_or("compiler/index.prose.md"),
         )
     }
 
@@ -344,7 +345,9 @@ mod tests {
         let root = Path::new("/repo");
         assert_eq!(
             spec.resolve_compiler_spec(root),
-            PathBuf::from("/repo/reference/openprose-prose/skills/open-prose/v0/compiler.md")
+            PathBuf::from(
+                "/repo/reference/openprose-prose/skills/open-prose/compiler/index.prose.md"
+            )
         );
         assert_eq!(
             spec.resolve_forme_spec(root),

@@ -2,10 +2,10 @@
   "id": "openprose",
   "repo": "openprose/prose",
   "submodule_path": "reference/openprose-prose",
-  "pinned_commit": "d6e9c64c82a6c56d84b0f9923dd9b7a7e44f8dd5",
+  "pinned_commit": "ce98a960530c08329e129c7824c18813380ecdbd",
   "paths": {
     "root": "skills/open-prose",
-    "compiler_spec": "v0/compiler.md",
+    "compiler_spec": "compiler/index.prose.md",
     "vm_spec": "prose.md",
     "forme_spec": "forme.md",
     "deps_spec": "deps.md"

@@ -2913,7 +2913,7 @@ mod tests {
     fn system_append_renders_skill_root_placeholder() {
         let manifest = example_manifest();
         let append = render_system_append(&manifest, "wire-v1").unwrap();
-        assert!(append.contains("reference/openprose-prose/skills/open-prose/prose.md"));
+        assert!(append.contains("# OpenProse VM System Prompt"));
         assert!(!append.contains("{OPENPROSE_SKILL_DIR}"));
     }
 
@@ -2921,11 +2921,8 @@ mod tests {
     fn wire_prompt_contains_forme_and_program_attachment() {
         let manifest = example_manifest();
         let root = tempdir().unwrap();
-        let staged = stage_program(
-            Path::new("reference/openprose-prose/skills/open-prose/examples/16-parallel-reviews"),
-            root.path(),
-        )
-        .unwrap();
+        let staged =
+            stage_program(Path::new("fixtures/adapter/parallel-reviews"), root.path()).unwrap();
 
         let prompt = build_wire_prompt(&manifest, &staged, "test-run").unwrap();
         assert!(prompt.contains("<openprose_file path=\"forme.md\">"));
@@ -2937,11 +2934,8 @@ mod tests {
     fn execute_prompt_contains_session_primitive_and_input_attachment() {
         let manifest = example_manifest();
         let root = tempdir().unwrap();
-        let staged = stage_program(
-            Path::new("reference/openprose-prose/skills/open-prose/examples/16-parallel-reviews"),
-            root.path(),
-        )
-        .unwrap();
+        let staged =
+            stage_program(Path::new("fixtures/adapter/parallel-reviews"), root.path()).unwrap();
         let prompt = build_execute_prompt(
             &manifest,
             &staged,
@@ -3101,11 +3095,8 @@ mod tests {
         )
         .unwrap();
 
-        let staged = stage_program(
-            Path::new("reference/openprose-prose/skills/open-prose/examples/16-parallel-reviews"),
-            dir.path(),
-        )
-        .unwrap();
+        let staged =
+            stage_program(Path::new("fixtures/adapter/parallel-reviews"), dir.path()).unwrap();
 
         assert_eq!(staged.entry_rel, PathBuf::from("index.md"));
         assert!(!staged.program_dir.join("stale.txt").exists());

@@ -15,6 +15,7 @@ use std::path::Path;
 
 fn main() {
     let spec_candidates = [
+        "reference/openprose-prose/skills/open-prose/compiler/index.prose.md",
         "reference/openprose-prose/skills/open-prose/v0/compiler.md",
         "reference/openprose-prose/skills/open-prose/compiler.md",
     ];

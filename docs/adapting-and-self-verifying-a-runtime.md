@@ -303,9 +303,9 @@ A real program that proves:
 - outputs are published
 - the final public binding is non-empty
 
-A good current example is:
+A stable repo-local fixture is:
 
-- `reference/openprose-prose/skills/open-prose/examples/16-parallel-reviews`
+- `fixtures/adapter/parallel-reviews`
 
 because it exercises real multi-service execution.
 

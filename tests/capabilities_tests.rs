@@ -47,10 +47,7 @@ fn capabilities_reports_environment_and_interaction_for_program() {
 
 #[test]
 fn capabilities_reports_test_requirements() {
-    let output = run(&[
-        "capabilities",
-        "reference/openprose-prose/skills/open-prose/examples/test-demo.md",
-    ]);
+    let output = run(&["capabilities", "fixtures/current/test-summarizer.prose.md"]);
     let json = parse_json(&output);
 
     assert_eq!(json["program"], "test-summarizer");
@@ -62,11 +59,11 @@ fn capabilities_reports_test_requirements() {
 #[test]
 fn capabilities_accepts_program_directory_targets() {
     let dir =
-        Path::new("reference/openprose-prose/skills/open-prose/examples/09-research-with-agents");
+        Path::new("reference/openprose-prose/skills/open-prose/examples/competitor-activity/src");
     let output = run(&["capabilities", dir.to_str().unwrap()]);
     let json = parse_json(&output);
 
-    assert_eq!(json["program"], "research-with-agents");
+    assert_eq!(json["program"], "competitor-activity-monitor");
     assert_eq!(json["requires"]["workspace-bindings"], true);
 }
 

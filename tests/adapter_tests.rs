@@ -180,7 +180,6 @@ esac
     fs::set_permissions(&fake_claude_path, permissions).unwrap();
 
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let skill_root = repo_root.join("reference/openprose-prose/skills/open-prose");
     let manifest_template =
         fs::read_to_string(repo_root.join("specs/adapters/claude-code-v1-md.json")).unwrap();
     let mut manifest: Value = serde_json::from_str(&manifest_template).unwrap();
@@ -212,7 +211,7 @@ esac
             "adapter",
             "dogfood",
             manifest_path.to_str().unwrap(),
-            "reference/openprose-prose/skills/open-prose/examples/16-parallel-reviews",
+            "fixtures/adapter/parallel-reviews",
             "--input-file",
             "code=tests/fixtures/get_user_records.py",
             "--expect-binding",
@@ -252,10 +251,10 @@ esac
     let wire_append = fs::read_to_string(capture_dir.join("wire-append.txt")).unwrap();
     let execute_append = fs::read_to_string(capture_dir.join("execute-append.txt")).unwrap();
 
-    assert!(wire_append.contains("# OpenProse VM System Prompt Enforcement"));
-    assert!(wire_append.contains(&skill_root.display().to_string()));
-    assert!(execute_append.contains("# Session Context Management"));
-    assert!(!execute_append.contains("# OpenProse VM System Prompt Enforcement"));
+    assert!(wire_append.contains("# OpenProse VM System Prompt"));
+    assert!(wire_append.contains("Contract Markdown"));
+    assert!(execute_append.contains("# The Render's Harness Contract"));
+    assert!(!execute_append.contains("# OpenProse VM System Prompt"));
     assert_ne!(wire_append, execute_append);
 }
 
@@ -468,7 +467,7 @@ EOF
             "adapter",
             "dogfood",
             "specs/adapters/codex-v1-md.json",
-            "reference/openprose-prose/skills/open-prose/examples/16-parallel-reviews",
+            "fixtures/adapter/parallel-reviews",
             "--input-file",
             "code=tests/fixtures/get_user_records.py",
             "--expect-binding",
@@ -745,7 +744,7 @@ exit 1
             "adapter",
             "dogfood",
             "specs/adapters/hermes-v1-md.json",
-            "reference/openprose-prose/skills/open-prose/examples/16-parallel-reviews",
+            "fixtures/adapter/parallel-reviews",
             "--input-file",
             "code=tests/fixtures/get_user_records.py",
             "--expect-binding",

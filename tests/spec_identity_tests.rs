@@ -286,13 +286,18 @@ fn specs_verify_named_openprose_uses_registry_identity_without_manifest() {
             .iter()
             .any(|capability| {
                 capability["id"] == "compiler"
-                    && capability["path"] == "v0/compiler.md"
+                    && capability["path"] == "compiler/index.prose.md"
                     && capability["present"] == true
             })
     );
-    assert!(json["source_capabilities"].as_array().unwrap().iter().any(
-        |capability| capability["id"] == "contract_markdown" && capability["present"] == false
-    ));
+    assert!(
+        json["source_capabilities"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|capability| capability["id"] == "contract_markdown"
+                && capability["present"] == true)
+    );
 }
 
 #[test]

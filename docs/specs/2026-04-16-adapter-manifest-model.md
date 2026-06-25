@@ -51,7 +51,7 @@ For the current OpenProse reference in this repo:
 
 - `source`: `openprose/prose`
 - `sourceUrl`: `https://github.com/openprose/prose.git`
-- `spec_ref`: `openprose/prose@d6e9c64c82a6c56d84b0f9923dd9b7a7e44f8dd5`
+- `spec_ref`: `openprose/prose@ce98a960530c08329e129c7824c18813380ecdbd`
 
 ## Current schema shape
 
@@ -89,7 +89,7 @@ For current v1 markdown programs the validator understands three deterministic p
   "subject": "pi deterministic OpenProse initializer for v1 markdown programs",
   "source": "openprose/prose",
   "sourceUrl": "https://github.com/openprose/prose.git",
-  "spec_ref": "openprose/prose@d6e9c64c82a6c56d84b0f9923dd9b7a7e44f8dd5",
+  "spec_ref": "openprose/prose@ce98a960530c08329e129c7824c18813380ecdbd",
   "skill_root": "skills/open-prose",
   "supported_program_formats": ["v1-single-file", "v1-multi-service"],
   "phases": {
@@ -124,17 +124,17 @@ openprose-lint adapter validate specs/adapters/codex-v1-md.json
 openprose-lint adapter validate specs/adapters/claude-code-v1-md.json
 
 openprose-lint adapter dogfood specs/adapters/claude-code-v1-md.json \
-  reference/openprose-prose/skills/open-prose/examples/16-parallel-reviews \
+  fixtures/adapter/parallel-reviews \
   --input-file code=tests/fixtures/get_user_records.py \
   --expect-binding synthesizer/report
 
 openprose-lint adapter dogfood specs/adapters/codex-v1-md.json \
-  reference/openprose-prose/skills/open-prose/examples/16-parallel-reviews \
+  fixtures/adapter/parallel-reviews \
   --input-file code=tests/fixtures/get_user_records.py \
   --expect-binding synthesizer/report
 
 openprose-lint adapter dogfood specs/adapters/hermes-v1-md.json \
-  reference/openprose-prose/skills/open-prose/examples/16-parallel-reviews \
+  fixtures/adapter/parallel-reviews \
   --input-file code=tests/fixtures/get_user_records.py \
   --expect-binding synthesizer/report
 ```

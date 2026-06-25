@@ -61,9 +61,9 @@ openprose-lint capabilities --runtime-manifest specs/runtime-subjects/pi-no-exte
 # Validate a deterministic OpenProse adapter manifest
 openprose-lint adapter validate specs/adapters/pi-v1-md.json
 
-# Dogfood a real adapter-initialized Claude Code run against a pinned OpenProse program
+# Dogfood an adapter-initialized Claude Code run against a stable local program fixture
 openprose-lint adapter dogfood specs/adapters/claude-code-v1-md.json \
-  reference/openprose-prose/skills/open-prose/examples/16-parallel-reviews \
+  fixtures/adapter/parallel-reviews \
   --input-file code=tests/fixtures/get_user_records.py \
   --expect-binding synthesizer/report
 
@@ -147,7 +147,7 @@ The linter vendors `openprose/prose` as a git submodule:
 - Deps spec: `reference/openprose-prose/skills/open-prose/deps.md`
 - pin: see `specs/openprose.json`
 
-Build-time vocabulary extraction reads the legacy v0 compiler spec at `reference/openprose-prose/skills/open-prose/v0/compiler.md` during `cargo build` and generates `spec_vocab.rs`. Bump the submodule to update: `cd reference/openprose-prose && git fetch origin && git checkout origin/main && cd ../..`
+Build-time vocabulary extraction reads the compiler spec at `reference/openprose-prose/skills/open-prose/compiler/index.prose.md` during `cargo build` and generates `spec_vocab.rs`. Bump the submodule to update: `cd reference/openprose-prose && git fetch origin && git checkout origin/main && cd ../..`
 
 ### Spec Identity
 
@@ -261,7 +261,7 @@ Warnings:
 The public `lint` command targets the current declarative Markdown language. A legacy path remains for archived imperative `.prose` programs:
 
 - **Current Markdown linting**: parses `.md` programs, including heading classification, contract parsing (`## Contract` and bare labels), service resolution, and `use:` import awareness. This is exposed as `openprose-lint lint`.
-- **Legacy compatibility linting**: parses archived `.prose` files. Vocabulary is extracted from the legacy v0 compiler spec at build time via `build.rs` -> `spec_vocab.rs`. This is exposed as `openprose-lint lint-legacy`.
+- **Legacy compatibility linting**: parses archived `.prose` files. Vocabulary is extracted from the pinned compiler spec at build time via `build.rs` -> `spec_vocab.rs`, with fallback support for older v0 compiler layouts. This is exposed as `openprose-lint lint-legacy`.
 - **Briefing generation**: reuses the current Markdown parser to produce structured preflight analysis for VM agents.
 - **`capabilities.rs`**: infers runtime capability requirements from a program, emits implied substrate dependencies, and can compare them against a runtime manifest.
 - **`adapter.rs`**: validates deterministic adapter manifests that pin exact OpenProse files, channels, and phase attachments.
