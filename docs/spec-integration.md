@@ -74,6 +74,13 @@ Forme, and Prose VM artifacts. Reactor docs are hashed and checked when a
 manifest declares them, but historical Reactor package commits did not all ship
 `reactor.md`.
 
+Runtime contracts fail closed: a manifest with an unknown future
+`runtime_contract` is invalid until prose-lint explicitly models that contract's
+required artifact surface. Direct and package-bundle checks also reject
+symlinked artifact paths, including symlinked ancestor directories, so a bundle
+cannot satisfy a root-scoped manifest by pointing at files outside the declared
+root.
+
 ## Drift policy
 
 Drift is allowed to exist only in documented form:

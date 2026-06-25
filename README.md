@@ -201,7 +201,9 @@ When `--git-repo` is supplied, `--root` must live inside that checkout. The
 verifier also reads `SKILL.md` frontmatter and checks that its `version` and
 `runtime_contract` match the manifest. Git-pinned checks compare each artifact
 digest to the blob stored at the expected commit, so uncommitted worktree bytes
-cannot masquerade as pinned source.
+cannot masquerade as pinned source. Unknown future `runtime_contract` values
+fail closed until this linter is updated, and artifact paths must resolve to
+regular files without symlinked components under the declared root.
 
 ## Profiles
 

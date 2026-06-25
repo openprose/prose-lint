@@ -44,7 +44,8 @@ Pre-public readiness pass ahead of open-sourcing under the OpenProse org.
   SHA-256 artifact hashes, complete package.json provenance for declared
   packages, trusted repo identity, SKILL metadata, checkout root ownership, and
   artifact blobs from an external expected git commit. It also enforces the
-  required load-bearing artifact surface for the declared `runtime_contract`.
+  required load-bearing artifact surface for the declared `runtime_contract`,
+  rejects unknown future runtime contracts, and rejects symlinked artifact paths.
 - Git pre-push hook (`.githooks/pre-push`) that delegates to `scripts/ci.sh`.
   Contributors activate it with `git config core.hooksPath .githooks`.
 - `LICENSE` (MIT, "Copyright (c) 2025-2026 OpenProse"), matching the

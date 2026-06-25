@@ -134,9 +134,18 @@ pub fn verify_spec_identity(
 }
 
 pub fn artifact_digest(path: &Path) -> Result<String> {
-    let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
+    let bytes = read_artifact_bytes(path)?;
     let digest = Sha256::digest(&bytes);
     Ok(format!("sha256:{digest:x}"))
+}
+
+fn read_artifact_bytes(path: &Path) -> Result<Vec<u8>> {
+    let metadata =
+        fs::symlink_metadata(path).with_context(|| format!("stat {}", path.display()))?;
+    if metadata.file_type().is_symlink() {
+        bail!("artifact path must not be a symlink: {}", path.display());
+    }
+    fs::read(path).with_context(|| format!("read {}", path.display()))
 }
 
 fn load_manifest(path: &Path) -> Result<SpecIdentityManifest> {
@@ -177,8 +186,11 @@ fn validate_manifest_shape(manifest: &SpecIdentityManifest, report: &mut SpecIde
     );
     report.check(
         "skill.runtime_contract",
-        manifest.skill.runtime_contract > 0,
-        format!("runtime_contract={}", manifest.skill.runtime_contract),
+        supported_runtime_contract(manifest.skill.runtime_contract),
+        format!(
+            "runtime_contract={} (supported: 1, 2)",
+            manifest.skill.runtime_contract
+        ),
     );
     report.check(
         "artifacts",
@@ -219,18 +231,27 @@ fn verify_required_artifacts(manifest: &SpecIdentityManifest, report: &mut SpecI
 
 fn required_artifacts(manifest: &SpecIdentityManifest) -> Vec<&'static str> {
     let mut required = BASE_REQUIRED_ARTIFACTS.to_vec();
-    if manifest.skill.runtime_contract >= 2 {
-        required.extend_from_slice(RUNTIME_CONTRACT_2_ARTIFACTS);
+    match manifest.skill.runtime_contract {
+        1 => {}
+        2 => required.extend_from_slice(RUNTIME_CONTRACT_2_ARTIFACTS),
+        _ => {}
     }
     required
+}
+
+fn supported_runtime_contract(runtime_contract: u32) -> bool {
+    matches!(runtime_contract, 1 | 2)
 }
 
 fn verify_artifacts(manifest: &SpecIdentityManifest, root: &Path, report: &mut SpecIdentityReport) {
     for (relative, expected) in &manifest.artifacts {
         let name = format!("artifact:{relative}");
-        let Ok(path) = safe_join(root, relative) else {
-            report.check(name, false, "artifact path escapes root");
-            continue;
+        let path = match checked_artifact_path(root, relative) {
+            Ok(path) => path,
+            Err(error) => {
+                report.check(name, false, error.to_string());
+                continue;
+            }
         };
         match artifact_digest(&path) {
             Ok(actual) => report.check(
@@ -241,6 +262,46 @@ fn verify_artifacts(manifest: &SpecIdentityManifest, root: &Path, report: &mut S
             Err(error) => report.check(name, false, error.to_string()),
         }
     }
+}
+
+fn checked_artifact_path(root: &Path, relative: &str) -> Result<PathBuf> {
+    let joined = safe_join(root, relative)?;
+    let mut current = root.to_path_buf();
+    for component in Path::new(relative).components() {
+        match component {
+            Component::Normal(part) => {
+                current.push(part);
+                let metadata = fs::symlink_metadata(&current)
+                    .with_context(|| format!("stat {}", current.display()))?;
+                if metadata.file_type().is_symlink() {
+                    bail!(
+                        "artifact path must not traverse a symlink: {}",
+                        current.display()
+                    );
+                }
+            }
+            Component::CurDir => {}
+            _ => bail!("artifact path escapes root: {relative}"),
+        }
+    }
+
+    let canonical = joined
+        .canonicalize()
+        .with_context(|| format!("canonicalize {}", joined.display()))?;
+    if !canonical.starts_with(root) {
+        bail!(
+            "artifact path resolves outside root: {} -> {}",
+            joined.display(),
+            canonical.display()
+        );
+    }
+
+    let metadata = fs::metadata(&joined).with_context(|| format!("stat {}", joined.display()))?;
+    if !metadata.is_file() {
+        bail!("artifact path must be a regular file: {}", joined.display());
+    }
+
+    Ok(joined)
 }
 
 fn verify_skill_document(
@@ -257,9 +318,12 @@ fn verify_skill_document(
         return;
     }
 
-    let Ok(path) = safe_join(root, "SKILL.md") else {
-        report.check("skill.document", false, "SKILL.md path escapes root");
-        return;
+    let path = match checked_artifact_path(root, "SKILL.md") {
+        Ok(path) => path,
+        Err(error) => {
+            report.check("skill.document", false, error.to_string());
+            return;
+        }
     };
     match load_skill_document_identity(&path) {
         Ok(identity) => {
@@ -469,7 +533,8 @@ fn safe_join(root: &Path, relative: &str) -> Result<PathBuf> {
 }
 
 fn load_skill_document_identity(path: &Path) -> Result<SkillDocumentIdentity> {
-    let source = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+    let source = String::from_utf8(read_artifact_bytes(path)?)
+        .with_context(|| format!("{} is not UTF-8", path.display()))?;
     let mut lines = source.lines();
     if lines.next().map(str::trim) != Some("---") {
         bail!("SKILL.md is missing YAML frontmatter");
@@ -596,6 +661,7 @@ mod tests {
     use super::{SpecIdentityOptions, artifact_digest, verify_spec_identity};
     use serde_json::json;
     use std::fs;
+    use std::os::unix::fs as unix_fs;
     use std::path::{Path, PathBuf};
     use std::process::Command;
     use tempfile::tempdir;
@@ -1064,6 +1130,188 @@ mod tests {
                 .iter()
                 .any(|check| { check.name == "skill.runtime_contract.document" && !check.passed })
         );
+    }
+
+    #[test]
+    fn rejects_unknown_future_runtime_contract() {
+        let dir = tempdir().unwrap();
+        let skill_root = dir.path().join("skills/open-prose");
+        write_skill_with_metadata(&skill_root, "0.15.0", 3, "contract\n");
+        let manifest = json!({
+            "schema": "openprose.spec-identity",
+            "schema_version": 1,
+            "spec_id": "openprose",
+            "source": {
+                "repo": "openprose/prose"
+            },
+            "skill": {
+                "version": "0.15.0",
+                "runtime_contract": 3
+            },
+            "packages": {},
+            "artifacts": {
+                "SKILL.md": artifact_digest(&skill_root.join("SKILL.md")).unwrap(),
+                "contract-markdown.md": artifact_digest(&skill_root.join("contract-markdown.md")).unwrap(),
+                "prose.md": artifact_digest(&skill_root.join("prose.md")).unwrap(),
+                "forme.md": artifact_digest(&skill_root.join("forme.md")).unwrap(),
+                "prosescript.md": artifact_digest(&skill_root.join("prosescript.md")).unwrap(),
+                "responsibility-runtime.md": artifact_digest(&skill_root.join("responsibility-runtime.md")).unwrap()
+            }
+        });
+        let manifest_path = skill_root.join("spec-version.json");
+        fs::write(
+            &manifest_path,
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        let report = verify_spec_identity(
+            &manifest_path,
+            SpecIdentityOptions {
+                root: Some(skill_root),
+                expected_repo: Some("openprose/prose".to_string()),
+                ..SpecIdentityOptions::default()
+            },
+        )
+        .unwrap();
+        assert!(!report.valid, "{report:#?}");
+        assert!(
+            report
+                .checks
+                .iter()
+                .any(|check| check.name == "skill.runtime_contract" && !check.passed)
+        );
+    }
+
+    #[test]
+    fn rejects_symlink_artifacts_that_leave_direct_mode_root() {
+        let dir = tempdir().unwrap();
+        let skill_root = dir.path().join("skill/open-prose");
+        let outside_root = dir.path().join("outside");
+        fs::create_dir_all(&skill_root).unwrap();
+        fs::create_dir_all(&outside_root).unwrap();
+        fs::write(
+            outside_root.join("SKILL.md"),
+            "---\nname: open-prose\nversion: 0.15.0\nruntime_contract: 2\n---\n",
+        )
+        .unwrap();
+        unix_fs::symlink(outside_root.join("SKILL.md"), skill_root.join("SKILL.md")).unwrap();
+        fs::write(skill_root.join("contract-markdown.md"), "contract\n").unwrap();
+        fs::write(skill_root.join("prose.md"), "Prose VM\n").unwrap();
+        fs::write(skill_root.join("forme.md"), "Forme\n").unwrap();
+        fs::write(skill_root.join("prosescript.md"), "ProseScript\n").unwrap();
+        fs::write(
+            skill_root.join("responsibility-runtime.md"),
+            "Responsibility Runtime\n",
+        )
+        .unwrap();
+
+        let manifest = json!({
+            "schema": "openprose.spec-identity",
+            "schema_version": 1,
+            "spec_id": "openprose",
+            "source": {
+                "repo": "openprose/prose"
+            },
+            "skill": {
+                "version": "0.15.0",
+                "runtime_contract": 2
+            },
+            "packages": {},
+            "artifacts": {
+                "SKILL.md": artifact_digest(&outside_root.join("SKILL.md")).unwrap(),
+                "contract-markdown.md": artifact_digest(&skill_root.join("contract-markdown.md")).unwrap(),
+                "prose.md": artifact_digest(&skill_root.join("prose.md")).unwrap(),
+                "forme.md": artifact_digest(&skill_root.join("forme.md")).unwrap(),
+                "prosescript.md": artifact_digest(&skill_root.join("prosescript.md")).unwrap(),
+                "responsibility-runtime.md": artifact_digest(&skill_root.join("responsibility-runtime.md")).unwrap()
+            }
+        });
+        let manifest_path = skill_root.join("spec-version.json");
+        fs::write(
+            &manifest_path,
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        let report = verify_spec_identity(
+            &manifest_path,
+            SpecIdentityOptions {
+                root: Some(skill_root),
+                expected_repo: Some("openprose/prose".to_string()),
+                ..SpecIdentityOptions::default()
+            },
+        )
+        .unwrap();
+        assert!(!report.valid, "{report:#?}");
+        assert!(
+            report
+                .checks
+                .iter()
+                .any(|check| { check.name == "artifact:SKILL.md" && !check.passed })
+        );
+        assert!(
+            report
+                .checks
+                .iter()
+                .any(|check| check.name == "skill.document" && !check.passed)
+        );
+    }
+
+    #[test]
+    fn rejects_symlinked_artifact_directories_that_leave_direct_mode_root() {
+        let dir = tempdir().unwrap();
+        let skill_root = dir.path().join("skill/open-prose");
+        let outside_root = dir.path().join("outside");
+        write_skill(&skill_root, "contract\n");
+        fs::create_dir_all(&outside_root).unwrap();
+        fs::write(outside_root.join("extra.md"), "outside\n").unwrap();
+        unix_fs::symlink(&outside_root, skill_root.join("linked")).unwrap();
+
+        let manifest = json!({
+            "schema": "openprose.spec-identity",
+            "schema_version": 1,
+            "spec_id": "openprose",
+            "source": {
+                "repo": "openprose/prose"
+            },
+            "skill": {
+                "version": "0.15.0",
+                "runtime_contract": 2
+            },
+            "packages": {},
+            "artifacts": {
+                "SKILL.md": artifact_digest(&skill_root.join("SKILL.md")).unwrap(),
+                "contract-markdown.md": artifact_digest(&skill_root.join("contract-markdown.md")).unwrap(),
+                "prose.md": artifact_digest(&skill_root.join("prose.md")).unwrap(),
+                "forme.md": artifact_digest(&skill_root.join("forme.md")).unwrap(),
+                "prosescript.md": artifact_digest(&skill_root.join("prosescript.md")).unwrap(),
+                "responsibility-runtime.md": artifact_digest(&skill_root.join("responsibility-runtime.md")).unwrap(),
+                "linked/extra.md": artifact_digest(&outside_root.join("extra.md")).unwrap()
+            }
+        });
+        let manifest_path = skill_root.join("spec-version.json");
+        fs::write(
+            &manifest_path,
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        let report = verify_spec_identity(
+            &manifest_path,
+            SpecIdentityOptions {
+                root: Some(skill_root),
+                expected_repo: Some("openprose/prose".to_string()),
+                ..SpecIdentityOptions::default()
+            },
+        )
+        .unwrap();
+        assert!(!report.valid, "{report:#?}");
+        assert!(report.checks.iter().any(|check| {
+            check.name == "artifact:linked/extra.md"
+                && !check.passed
+                && check.detail.contains("must not traverse a symlink")
+        }));
     }
 
     #[test]

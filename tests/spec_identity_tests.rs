@@ -1,6 +1,7 @@
 use openprose_lint::spec_identity::artifact_digest;
 use serde_json::{Value, json};
 use std::fs;
+use std::os::unix::fs as unix_fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::tempdir;
@@ -237,6 +238,146 @@ fn specs_verify_rejects_declared_package_without_package_json() {
     assert_eq!(json["valid"], false);
     assert!(json["checks"].as_array().unwrap().iter().any(|check| {
         check["name"] == "package:@openprose/reactor" && check["passed"] == false
+    }));
+}
+
+#[test]
+fn specs_verify_rejects_symlinked_artifact_directories() {
+    let dir = tempdir().unwrap();
+    let skill_root = dir.path().join("skill/open-prose");
+    let outside_root = dir.path().join("outside");
+    write_skill(&skill_root, "contract package\n");
+    fs::create_dir_all(&outside_root).unwrap();
+    fs::write(outside_root.join("extra.md"), "outside\n").unwrap();
+    unix_fs::symlink(&outside_root, skill_root.join("linked")).unwrap();
+
+    let manifest = json!({
+        "schema": "openprose.spec-identity",
+        "schema_version": 1,
+        "spec_id": "openprose",
+        "source": {
+            "repo": "openprose/prose"
+        },
+        "skill": {
+            "version": "0.15.0",
+            "runtime_contract": 2
+        },
+        "packages": {},
+        "artifacts": {
+            "SKILL.md": artifact_digest(&skill_root.join("SKILL.md")).unwrap(),
+            "contract-markdown.md": artifact_digest(&skill_root.join("contract-markdown.md")).unwrap(),
+            "prose.md": artifact_digest(&skill_root.join("prose.md")).unwrap(),
+            "forme.md": artifact_digest(&skill_root.join("forme.md")).unwrap(),
+            "prosescript.md": artifact_digest(&skill_root.join("prosescript.md")).unwrap(),
+            "reactor.md": artifact_digest(&skill_root.join("reactor.md")).unwrap(),
+            "responsibility-runtime.md": artifact_digest(&skill_root.join("responsibility-runtime.md")).unwrap(),
+            "linked/extra.md": artifact_digest(&outside_root.join("extra.md")).unwrap()
+        }
+    });
+    let manifest_path = skill_root.join("spec-version.json");
+    fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
+
+    let output = run(&[
+        "specs",
+        "verify",
+        "--manifest",
+        manifest_path.to_str().unwrap(),
+        "--root",
+        skill_root.to_str().unwrap(),
+        "--expect-repo",
+        "openprose/prose",
+    ]);
+    assert_eq!(output.status.code(), Some(1), "status: {:?}", output.status);
+    let json = parse_json(&output);
+    assert_eq!(json["valid"], false);
+    assert!(json["checks"].as_array().unwrap().iter().any(|check| {
+        check["name"] == "artifact:linked/extra.md"
+            && check["passed"] == false
+            && check["detail"]
+                .as_str()
+                .unwrap()
+                .contains("must not traverse a symlink")
+    }));
+}
+
+#[test]
+fn specs_verify_rejects_package_bundle_symlinked_artifact_directories() {
+    let dir = tempdir().unwrap();
+    let package_root = dir.path().join("node_modules/@openprose/reactor");
+    let skill_root = package_root.join("skill/open-prose");
+    let outside_root = dir.path().join("outside");
+    write_skill(&skill_root, "contract package\n");
+    fs::create_dir_all(&outside_root).unwrap();
+    fs::write(outside_root.join("extra.md"), "outside\n").unwrap();
+    fs::write(
+        package_root.join("package.json"),
+        serde_json::to_string_pretty(&json!({
+            "name": "@openprose/reactor",
+            "version": "0.3.1"
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    unix_fs::symlink(&outside_root, skill_root.join("linked")).unwrap();
+
+    let manifest = json!({
+        "schema": "openprose.spec-identity",
+        "schema_version": 1,
+        "spec_id": "openprose",
+        "source": {
+            "repo": "openprose/prose"
+        },
+        "skill": {
+            "version": "0.15.0",
+            "runtime_contract": 2
+        },
+        "packages": {
+            "@openprose/reactor": "0.3.1"
+        },
+        "artifacts": {
+            "SKILL.md": artifact_digest(&skill_root.join("SKILL.md")).unwrap(),
+            "contract-markdown.md": artifact_digest(&skill_root.join("contract-markdown.md")).unwrap(),
+            "prose.md": artifact_digest(&skill_root.join("prose.md")).unwrap(),
+            "forme.md": artifact_digest(&skill_root.join("forme.md")).unwrap(),
+            "prosescript.md": artifact_digest(&skill_root.join("prosescript.md")).unwrap(),
+            "reactor.md": artifact_digest(&skill_root.join("reactor.md")).unwrap(),
+            "responsibility-runtime.md": artifact_digest(&skill_root.join("responsibility-runtime.md")).unwrap(),
+            "linked/extra.md": artifact_digest(&outside_root.join("extra.md")).unwrap()
+        }
+    });
+    let manifest_path = skill_root.join("spec-version.json");
+    fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
+
+    let output = run(&[
+        "specs",
+        "verify",
+        "--manifest",
+        manifest_path.to_str().unwrap(),
+        "--root",
+        skill_root.to_str().unwrap(),
+        "--expect-repo",
+        "openprose/prose",
+        "--package-json",
+        package_root.join("package.json").to_str().unwrap(),
+    ]);
+    assert_eq!(output.status.code(), Some(1), "status: {:?}", output.status);
+    let json = parse_json(&output);
+    assert_eq!(json["valid"], false);
+    assert!(json["checks"].as_array().unwrap().iter().any(|check| {
+        check["name"] == "artifact:linked/extra.md"
+            && check["passed"] == false
+            && check["detail"]
+                .as_str()
+                .unwrap()
+                .contains("must not traverse a symlink")
     }));
 }
 
