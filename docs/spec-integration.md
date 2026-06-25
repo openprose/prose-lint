@@ -12,10 +12,12 @@ The integration contract is:
    - Forme: `skills/open-prose/forme.md`
    - deps: `skills/open-prose/deps.md`
    - legacy v0 compiler: `skills/open-prose/v0/compiler.md`
-5. If a spec identity manifest exists, `paths.version_manifest` points to it and
-   `cargo run --bin openprose-lint -- specs verify --spec openprose` verifies
-   the manifest hashes, repo identity, root ownership, skill metadata, and each
-   artifact blob from the pinned submodule commit.
+5. If a spec identity manifest exists in the pinned spec, `paths.version_manifest`
+   points to it and `cargo run --bin openprose-lint -- specs verify --spec openprose`
+   verifies the manifest hashes, repo identity, root ownership, skill metadata,
+   and each artifact blob from the pinned submodule commit. The current pinned
+   `openprose` entry intentionally has no `paths.version_manifest`, so this
+   shortcut fails closed until the upstream spec ships the manifest.
 6. `bun run true-up:gate` is the first repository-consistency gate after formatting.
 7. `cargo test` is the first Rust behavioral gate.
 8. `cargo run --bin openprose-lint -- lint --profile compat reference/openprose-prose/skills/open-prose/examples` is the smoke test for the current declarative example corpus. The public command surface intentionally exposes `lint` for current Markdown programs and `lint-legacy` for archived imperative programs; private generation-suffixed aliases are not valid commands.
@@ -35,7 +37,9 @@ The current CLI default remains `compat` to preserve the existing smoke-test wor
 3. Bump the submodule in this repo to that commit.
 4. If the pinned spec ships `skills/open-prose/spec-version.json`, set
    `paths.version_manifest` in `specs/openprose.json` and run
-   `cargo run --bin openprose-lint -- specs verify --spec openprose`.
+   `cargo run --bin openprose-lint -- specs verify --spec openprose`. Until then,
+   keep `paths.version_manifest` unset so `--spec openprose` fails closed instead
+   of implying the pinned checkout has been identity-manifested.
 5. For package bundles, run `specs verify` in direct manifest mode with every
    declared package's `package.json`; package versions are provenance labels,
    while file hashes and the source identity are the contract.

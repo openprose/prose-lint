@@ -242,6 +242,20 @@ fn specs_verify_rejects_declared_package_without_package_json() {
 }
 
 #[test]
+fn specs_verify_named_openprose_fails_closed_without_registry_manifest() {
+    let output = run(&["specs", "verify", "--spec", "openprose"]);
+    assert_eq!(output.status.code(), Some(2), "status: {:?}", output.status);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stdout.trim().is_empty(), "stdout: {stdout}");
+    assert!(
+        stderr.contains("spec source 'openprose' has no version_manifest configured"),
+        "stderr: {stderr}"
+    );
+}
+
+#[test]
 fn specs_verify_rejects_symlinked_artifact_directories() {
     let dir = tempdir().unwrap();
     let skill_root = dir.path().join("skill/open-prose");

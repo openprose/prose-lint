@@ -186,11 +186,10 @@ openprose-lint specs verify --manifest skills/open-prose/spec-version.json \
 ```
 
 When a spec registry entry declares `paths.version_manifest`, `--spec` mode uses
-that registry repo and pin as the expected source identity:
-
-```bash
-openprose-lint specs verify --spec openprose
-```
+that registry repo and pin as the expected source identity. The current pinned
+`openprose` registry entry does not declare one yet because the vendored spec
+does not ship a spec identity manifest; until it does, use direct manifest mode
+for package bundles and release candidates.
 
 The manifest may omit `source.commit` when it is committed inside the same git
 tree; the external pin from `--expect-commit` or `specs/openprose.json` avoids a
