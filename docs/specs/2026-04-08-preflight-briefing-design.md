@@ -16,7 +16,7 @@ A new `briefing` subcommand in `openprose-lint` that outputs a versioned, struct
 1. **Structured data, not narrative.** The format primes the agent into compiler headspace. No prose, no explanation — just extracted facts.
 2. **Earn every token.** The briefing competes for context window with the spec and the program itself. ~200-400 tokens max. If a section doesn't save the agent work, cut it.
 3. **Deterministic.** Same program file → same briefing output. No LLM in the loop.
-4. **Versioned.** The briefing schema is a contract between the linter and the VM spec. The header `<!-- openprose-lint briefing v1 -->` lets the VM spec gate on version.
+4. **Versioned.** The briefing schema is a contract between the linter and the VM spec. The header `<!-- openprose-lint briefing v2 -->` lets the VM spec gate on version.
 5. **No interpretation.** The linter extracts structure, not meaning. Strategies, execution logic, and natural-language content pass through to the agent unprocessed.
 
 ## Flow
@@ -29,10 +29,10 @@ prose run program.md
   → agent executes with structural pre-knowledge
 ```
 
-## Briefing Schema (v1)
+## Briefing Schema (v2)
 
 ```
-<!-- openprose-lint briefing v1 -->
+<!-- openprose-lint briefing v2 -->
 ## {name}
 kind: {kind} | services: {count} | imports: {count}
 
@@ -40,6 +40,8 @@ kind: {kind} | services: {count} | imports: {count}
 requires:
 - {name}: {description}
 - {name}: (optional) {description}
+context:
+- {name}: {description}
 ensures:
 - {name}
 errors:
@@ -55,22 +57,30 @@ environment:
 environment: {yes|no} | use-imports: {yes|no} | run-inputs: {yes|no} | execution-block: {yes|no}
 
 ### diagnostics
-{N} errors, {N} warnings | spec: openprose/prose@{sha}
+{N} errors, {N} warnings
 ```
 
 ### Section Details
 
-**Header** (`<!-- openprose-lint briefing v1 -->`)
-- Version gate. The VM spec can say "if briefing v1 present, read contract and services before wiring."
+For current OpenProse source kinds, v2 emits the kind-native contract shape. If a
+candidate-tolerated `### Context` section is present, v2 extracts it without
+promoting that section to canonical OpenProse language status:
+
+- `responsibility` / `gateway`: `requires`, `context`, `maintains`, `errors`, `environment`
+- `function`: `context`, `parameters`, `returns`, `errors`, `environment`
+- legacy `program` and unknown kinds: `requires`, `context`, `ensures`, `errors`, `environment`
+
+**Header** (`<!-- openprose-lint briefing v2 -->`)
+- Version gate. The VM spec can say "if briefing v2 present, read contract and services before wiring."
 - Bumped when the schema changes in a way that would confuse a VM expecting the old format.
 
 **Program identity** (one line after `##`)
-- `kind`: program, service, or test
+- `kind`: the parsed frontmatter kind, such as `program`, `responsibility`, `gateway`, `function`, or `test`
 - `services`: count of declared services
 - `imports`: count of `use:` imports
 
 **Contract** (`### contract`)
-- Pre-parsed `requires`, `ensures`, `errors`, `environment` from frontmatter + body.
+- Pre-parsed kind-native contract sections from frontmatter + body.
 - Each item on its own line with `- name: description` format.
 - Optional items marked with `(optional)` and default values where declared.
 - Sections with no items show `(none)`.
@@ -121,7 +131,7 @@ When given a directory, emit one briefing per root program file (`kind: program`
 
 ## Versioning Policy
 
-- The `v1` in `<!-- openprose-lint briefing v1 -->` is the schema version.
+- The `v2` in `<!-- openprose-lint briefing v2 -->` is the schema version.
 - Bumped when: section added/removed, section header renamed, field format changes.
 - NOT bumped when: new feature flag added to `### features`, new resolution type added to `### services`.
 - The VM spec (`prose.md`) should reference the minimum briefing version it understands.

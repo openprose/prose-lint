@@ -40,6 +40,7 @@ pub struct Frontmatter {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ContractSections {
     pub(crate) requires: Vec<ContractItem>,
+    pub(crate) context: Vec<ContractItem>,
     pub(crate) ensures: Vec<ContractItem>,
     pub(crate) maintains: Vec<ContractItem>,
     pub(crate) parameters: Vec<ContractItem>,
@@ -81,7 +82,7 @@ pub(crate) struct Heading {
     code_block_fields: HashSet<String>,
 }
 
-// ── Known vocabulary (from current OpenProse Contract Markdown) ─────────────
+// ── Known vocabulary (current OpenProse plus candidate-tolerated sections) ──
 //
 // Invariant: when a frontmatter kind lands on openprose/prose main, prose-lint
 // main must treat it as current spec vocabulary, not as corpus drift.
@@ -136,6 +137,9 @@ pub(crate) const KNOWN_CONTRACT_SECTIONS: &[&str] = &[
     "runtime",
     "skills",
     "tools",
+    // Candidate-tolerated section: extracted when present so later canonical
+    // contract sections are not swallowed while the language feature is tested.
+    "context",
     "shape",
     "execution",
     "fixtures",
@@ -1014,6 +1018,7 @@ pub(crate) fn parse_markdown_body(
 fn push_contract_item(sections: &mut ContractSections, section: &str, item: ContractItem) {
     match section {
         "requires" => sections.requires.push(item),
+        "context" => sections.context.push(item),
         "ensures" => sections.ensures.push(item),
         "maintains" => sections.maintains.push(item),
         "parameters" => sections.parameters.push(item),
@@ -1744,6 +1749,10 @@ Material risk score.
 
 - `cli:gh`: GitHub CLI
 
+### Context
+
+- `signals`: caller-provided account signals available to this render.
+
 ### Shape
 
 - `self`: score risk
@@ -1804,6 +1813,73 @@ call worker
         assert!(
             !result.diagnostics.iter().any(|d| d.code == "MDW020"),
             "current sections should not be fake components: {:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn candidate_context_section_preserves_later_responsibility_contract_sections() {
+        let source = "\
+---
+name: context-before-maintains
+kind: responsibility
+version: 0.15.0
+id: 067NC4KG01RG50R40M30E20918
+---
+
+### Context
+
+- `brief`: caller-provided brief that should be visible to this responsibility.
+
+### Requires
+
+- `brief`: caller-provided brief.
+
+### Maintains
+
+- `answer`: answer grounded only in declared context.
+";
+        let result = current_lint_source_with_profile(
+            Path::new("context-before-maintains.prose.md"),
+            source,
+            LintProfile::Strict,
+        );
+        assert!(
+            !result.diagnostics.iter().any(|d| d.code == "MDW014"),
+            "context section should not swallow later maintains section: {:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn candidate_context_section_preserves_later_function_returns_section() {
+        let source = "\
+---
+name: context-before-function-returns
+kind: function
+version: 0.15.0
+---
+
+### Context
+
+- `document`: caller-provided document available to this function.
+
+### Parameters
+
+- `document`: text to summarize.
+
+### Returns
+
+- `summary`: concise grounded summary.
+";
+        let result = current_lint_source_with_profile(
+            Path::new("context-before-function-returns.prose.md"),
+            source,
+            LintProfile::Strict,
+        );
+        assert!(
+            !result.diagnostics.iter().any(|d| d.code == "MDW014"),
+            "context section should not swallow later returns section: {:?}",
             result.diagnostics
         );
     }

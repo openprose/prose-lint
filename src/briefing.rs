@@ -60,7 +60,7 @@ fn write_header(out: &mut String, fm: &Frontmatter) {
     let service_count = fm.nodes.len();
     let import_count = fm.use_deps.len();
 
-    writeln!(out, "<!-- openprose-lint briefing v1 -->").unwrap();
+    writeln!(out, "<!-- openprose-lint briefing v2 -->").unwrap();
     writeln!(out, "## {name}").unwrap();
     writeln!(
         out,
@@ -73,9 +73,23 @@ fn write_contract(out: &mut String, fm: &Frontmatter, sections: &ContractSection
     writeln!(out).unwrap();
     writeln!(out, "### contract").unwrap();
 
-    write_contract_section(out, "requires", &sections.requires, &fm.requires);
-    write_contract_section(out, "ensures", &sections.ensures, &fm.ensures);
-    write_contract_section(out, "errors", &sections.errors, &[]);
+    let kind = fm.kind.as_deref().unwrap_or_default();
+    if kind.eq_ignore_ascii_case("function") {
+        write_contract_section(out, "context", &sections.context, &[]);
+        write_contract_section(out, "parameters", &sections.parameters, &[]);
+        write_contract_section(out, "returns", &sections.returns, &[]);
+        write_contract_section(out, "errors", &sections.errors, &[]);
+    } else if kind.eq_ignore_ascii_case("responsibility") || kind.eq_ignore_ascii_case("gateway") {
+        write_contract_section(out, "requires", &sections.requires, &fm.requires);
+        write_contract_section(out, "context", &sections.context, &[]);
+        write_contract_section(out, "maintains", &sections.maintains, &[]);
+        write_contract_section(out, "errors", &sections.errors, &[]);
+    } else {
+        write_contract_section(out, "requires", &sections.requires, &fm.requires);
+        write_contract_section(out, "context", &sections.context, &[]);
+        write_contract_section(out, "ensures", &sections.ensures, &fm.ensures);
+        write_contract_section(out, "errors", &sections.errors, &[]);
+    }
 
     if sections.environment.is_empty() {
         writeln!(out, "environment: (none)").unwrap();

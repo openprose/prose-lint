@@ -94,7 +94,7 @@ not part of the public interface.
 The `briefing` command outputs a versioned, structured markdown block designed to be read by a Prose-Complete VM agent before execution. It contains pre-parsed contract, service resolution, feature flags, and diagnostic summary — putting the agent in compiler headspace with deterministic structural analysis.
 
 ```
-<!-- openprose-lint briefing v1 -->
+<!-- openprose-lint briefing v2 -->
 ## example-job-daily
 kind: program | services: 4 | imports: 3
 
@@ -102,6 +102,7 @@ kind: program | services: 4 | imports: 3
 requires:
 - company_name: the fleet operator to research
 - gate_level: (optional, default "external") review level
+context: (none)
 ensures:
 - brief, delivered, dashboard_updated
 errors: (none)
