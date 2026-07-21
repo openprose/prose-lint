@@ -155,6 +155,82 @@ pub(crate) const KNOWN_CONTRACT_SECTIONS: &[&str] = &[
     "payload",
 ];
 
+// Contract sections per current spec kind (contract-markdown.md "Canonical
+// Sections" table). Used for the MDW013 message only; detection is against
+// KNOWN_CONTRACT_SECTIONS so candidate-tolerated sections stay accepted.
+const SPEC_SECTIONS_BY_KIND: &[(&str, &[&str])] = &[
+    (
+        "responsibility",
+        &[
+            "description",
+            "goal",
+            "requires",
+            "maintains",
+            "continuity",
+            "errors",
+            "invariants",
+            "strategies",
+            "environment",
+            "runtime",
+            "skills",
+            "tools",
+            "shape",
+            "execution",
+        ],
+    ),
+    (
+        "function",
+        &[
+            "description",
+            "parameters",
+            "returns",
+            "errors",
+            "invariants",
+            "strategies",
+            "environment",
+            "runtime",
+            "skills",
+            "tools",
+            "shape",
+            "execution",
+        ],
+    ),
+    (
+        "gateway",
+        &[
+            "description",
+            "goal",
+            "maintains",
+            "continuity",
+            "schedule",
+            "receives",
+            "emits",
+            "payload",
+        ],
+    ),
+    (
+        "pattern",
+        &[
+            "description",
+            "requires",
+            "invariants",
+            "slots",
+            "config",
+            "delegation",
+        ],
+    ),
+    (
+        "test",
+        &[
+            "description",
+            "strategies",
+            "fixtures",
+            "expects",
+            "expects not",
+        ],
+    ),
+];
+
 // ── Extended vocabulary (observed in press corpus, not yet in spec) ──────────
 
 const CORPUS_FRONTMATTER_KEYS: &[&str] = &[
@@ -838,6 +914,66 @@ fn classify_heading(name: &str, fm_nodes: &HashSet<String>) -> HeadingKind {
     HeadingKind::Documentation
 }
 
+/// Levenshtein edit distance between two ASCII-ish strings (by char).
+fn edit_distance(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    let mut curr = vec![0usize; b.len() + 1];
+    for (i, &ca) in a.iter().enumerate() {
+        curr[0] = i + 1;
+        for (j, &cb) in b.iter().enumerate() {
+            let subst = prev[j] + usize::from(ca != cb);
+            curr[j + 1] = subst.min(prev[j + 1] + 1).min(curr[j] + 1);
+        }
+        std::mem::swap(&mut prev, &mut curr);
+    }
+    prev[b.len()]
+}
+
+/// If `heading_lower` is a near-miss for a known contract section, return the
+/// closest known section name. Distance budget: 1 for short names, 2 otherwise.
+/// The spec (contract-markdown.md "Canonical Sections") makes genuinely unknown
+/// `###` sections legal documentation, so only likely typos are reported.
+fn section_typo_suggestion(heading_lower: &str) -> Option<&'static str> {
+    let mut best: Option<(usize, &'static str)> = None;
+    for &known in KNOWN_CONTRACT_SECTIONS {
+        let d = edit_distance(heading_lower, known);
+        if best.is_none_or(|(bd, _)| d < bd) {
+            best = Some((d, known));
+        }
+    }
+    let (d, known) = best?;
+    let budget = if heading_lower.len() <= 4 { 1 } else { 2 };
+    (d > 0 && d <= budget).then_some(known)
+}
+
+/// Render a lowercase section name in spec heading style (`expects not` → `Expects Not`).
+fn title_case_section(name: &str) -> String {
+    name.split(' ')
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                Some(first) => first.to_ascii_uppercase().to_string() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The section vocabulary to cite in MDW013 for a file's kind.
+fn sections_for_kind_message(kind: Option<&str>) -> String {
+    if let Some(kind) = kind
+        && let Some((_, sections)) = SPEC_SECTIONS_BY_KIND
+            .iter()
+            .find(|(k, _)| kind.eq_ignore_ascii_case(k))
+    {
+        return format!("sections for kind `{kind}`: {}", sections.join(", "));
+    }
+    format!("known sections: {}", KNOWN_CONTRACT_SECTIONS.join(", "))
+}
+
 pub(crate) fn parse_markdown_body(
     path: &Path,
     body: &str,
@@ -850,6 +986,12 @@ pub(crate) fn parse_markdown_body(
     let fm_nodes: HashSet<String> = fm.nodes.iter().map(|n| n.to_lowercase()).collect();
 
     let mut current_heading: Option<Heading> = None;
+    // Whether `current_heading` keeps owning contract sections that follow it.
+    // True for `##` inline-node headings and for `###` headings that exactly
+    // match a declared node (legacy corpus); false for other `###` headings,
+    // whose scope ends at the next sibling `###` contract section
+    // (contract-markdown.md "File Extraction": only `##` opens an inline node).
+    let mut current_heading_keeps_sections = false;
     let mut current_section: Option<String> = None;
     let mut in_code_block = false;
     let mut code_block_content = String::new();
@@ -912,6 +1054,7 @@ pub(crate) fn parse_markdown_body(
                         has_body_contract: false,
                         code_block_fields: HashSet::new(),
                     });
+                    current_heading_keeps_sections = true;
                 }
             }
             continue;
@@ -921,8 +1064,36 @@ pub(crate) fn parse_markdown_body(
         if let Some(heading_text) = trimmed.strip_prefix("### ") {
             let heading_lower = heading_text.trim().to_lowercase();
             if KNOWN_CONTRACT_SECTIONS.contains(&heading_lower.as_str()) {
+                // A `###` contract section ends the scope of a sibling `###`
+                // heading; only a `##` inline node (or a declared-node `###`
+                // heading from the legacy corpus) keeps owning what follows.
+                if !current_heading_keeps_sections && let Some(h) = current_heading.take() {
+                    headings.push(h);
+                }
                 current_section = Some(heading_lower);
                 continue;
+            }
+
+            // MDW013: unknown `###` heading that is a near-miss for a known
+            // contract section. The spec keeps genuinely unknown sections
+            // legal as documentation, so only likely typos are flagged.
+            if !fm_nodes.contains(&heading_lower)
+                && let Some(suggestion) = section_typo_suggestion(&heading_lower)
+            {
+                let column = line.len() - line.trim_start().len() + 1;
+                diagnostics.push(Diagnostic::new(
+                    path,
+                    "MDW013",
+                    Severity::Warning,
+                    format!(
+                        "Unknown contract section: `{}` (did you mean `### {}`?; {})",
+                        heading_text.trim(),
+                        title_case_section(suggestion),
+                        sections_for_kind_message(fm.kind.as_deref()),
+                    ),
+                    line_num,
+                    column,
+                ));
             }
 
             if let Some(h) = current_heading.take() {
@@ -938,6 +1109,7 @@ pub(crate) fn parse_markdown_body(
                 has_body_contract: false,
                 code_block_fields: HashSet::new(),
             });
+            current_heading_keeps_sections = fm_nodes.contains(&heading_lower);
             current_section = None;
             continue;
         }
@@ -1880,6 +2052,100 @@ version: 0.15.0
         assert!(
             !result.diagnostics.iter().any(|d| d.code == "MDW014"),
             "context section should not swallow later returns section: {:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn sections_after_unknown_heading_still_recognized() {
+        // `### Banana` must not absorb the later `### Returns` section.
+        let source = "---\nname: t\nkind: function\n---\n\n### Parameters\n\n- x: input\n\n### Banana\n\n- nonsense\n\n### Returns\n\n- y: output\n";
+        let result = current_lint_source(Path::new("test.md"), source);
+        assert!(
+            !result.diagnostics.iter().any(|d| d.code == "MDW014"),
+            "unknown heading swallowed the returns section: {:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn genuinely_unknown_section_is_legal_documentation() {
+        // contract-markdown.md: "Unknown ### sections are preserved as
+        // documentation." No typo suggestion applies, so no diagnostic.
+        let source = "---\nname: t\nkind: function\n---\n\n### Parameters\n\n- x: input\n\n### Banana\n\n- nonsense\n\n### Returns\n\n- y: output\n";
+        let result = current_lint_source(Path::new("test.md"), source);
+        assert!(
+            !result.diagnostics.iter().any(|d| d.code == "MDW013"),
+            "spec-legal documentation section was flagged: {:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn typo_section_flagged_at_heading_position_and_does_not_swallow() {
+        let source = "---\nname: t\nkind: function\n---\n\n### Parameters\n\n- x: input\n\n### Parameter\n\n- typo\n\n### Returns\n\n- y: output\n";
+        let result = current_lint_source(Path::new("test.md"), source);
+        let typo = result
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "MDW013")
+            .expect("typo'd section heading should raise MDW013");
+        assert_eq!(
+            (typo.line, typo.column),
+            (10, 1),
+            "MDW013 must anchor to the `### Parameter` heading line"
+        );
+        assert!(
+            typo.message.contains("did you mean `### Parameters`?"),
+            "message should suggest the near-miss: {}",
+            typo.message
+        );
+        assert!(
+            typo.message.contains("sections for kind `function`"),
+            "message should list the kind's sections: {}",
+            typo.message
+        );
+        assert!(
+            !result.diagnostics.iter().any(|d| d.code == "MDW014"),
+            "typo'd heading swallowed the returns section: {:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn canonical_function_sections_stay_clean() {
+        let source = "---\nname: t\nkind: function\n---\n\n### Parameters\n\n- x: input\n\n### Returns\n\n- y: output\n";
+        let result = current_lint_source(Path::new("test.md"), source);
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .all(|d| d.code != "MDW013" && d.code != "MDW014"),
+            "canonical file must stay clean: {:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn returns_before_unknown_heading_stays_clean() {
+        let source = "---\nname: t\nkind: function\n---\n\n### Parameters\n\n- x: input\n\n### Returns\n\n- y: output\n\n### Banana\n\n- nonsense\n";
+        let result = current_lint_source(Path::new("test.md"), source);
+        assert!(
+            !result.diagnostics.iter().any(|d| d.code == "MDW014"),
+            "unexpected diagnostics: {:?}",
+            result.diagnostics
+        );
+    }
+
+    #[test]
+    fn declared_node_h3_heading_keeps_owning_following_sections() {
+        // Legacy corpus: a `###` heading naming a declared node still owns the
+        // contract sections after it (its body contract), so MDW020 stays quiet.
+        let source = "---\nname: t\nkind: program\nnodes: [worker]\nrequires:\n  - job: the job\n---\n# T\n\n### worker\n\n### Strategies\n\n- do the work carefully\n";
+        let result = current_lint_source(Path::new("test.md"), source);
+        assert!(
+            !result.diagnostics.iter().any(|d| d.code == "MDW020"),
+            "declared node lost its body contract: {:?}",
             result.diagnostics
         );
     }
