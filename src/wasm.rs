@@ -39,3 +39,13 @@ struct JsDiagnostic {
     code: String,
     message: String,
 }
+
+/// Declared parameters of a program's `### Parameters` section — the run
+/// surfaces derive their input forms from this (the linter is the canonical
+/// dialect parser). Returns an array of
+/// {name, description, required, shape, default}.
+#[wasm_bindgen]
+pub fn parameters(source: &str) -> JsValue {
+    let params = crate::params::declared_parameters(source);
+    serde_wasm_bindgen::to_value(&params).unwrap_or(JsValue::NULL)
+}

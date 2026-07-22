@@ -17,6 +17,7 @@ pub mod hover;
 pub mod lint;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod lsp;
+pub mod params;
 pub mod profile;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod release;
