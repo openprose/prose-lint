@@ -28,7 +28,11 @@ fn shape_of(desc: &str) -> &'static str {
         "array"
     } else if d.contains("json object") || d.contains("object of shape") || d.contains("map of") {
         "object"
-    } else if d.contains("number of") || d.starts_with("number") || d.contains("integer") || d.contains("count of") {
+    } else if d.contains("number of")
+        || d.starts_with("number")
+        || d.contains("integer")
+        || d.contains("count of")
+    {
         "number"
     } else if d.contains("boolean") || d.contains("true or false") || d.contains("true/false") {
         "boolean"
@@ -42,9 +46,7 @@ fn default_of(desc: &str) -> Option<String> {
     for marker in ["defaults to ", "default: ", "default is "] {
         if let Some(idx) = lower.find(marker) {
             let tail = &desc[idx + marker.len()..];
-            let end = tail
-                .find(|c: char| c == '.' || c == ';' || c == ',' || c == ')')
-                .unwrap_or(tail.len());
+            let end = tail.find(['.', ';', ',', ')']).unwrap_or(tail.len());
             let val = tail[..end].trim().trim_matches('`').trim_matches('"');
             if !val.is_empty() {
                 return Some(val.to_string());
@@ -76,19 +78,19 @@ pub fn declared_parameters(source: &str) -> Vec<DeclaredParam> {
         let lt = trimmed.trim_start();
         if let Some(item) = lt.strip_prefix("- ") {
             // - `name`: prose
-            if let Some(rest) = item.strip_prefix('`') {
-                if let Some(close) = rest.find('`') {
-                    let name = &rest[..close];
-                    let after = rest[close + 1..].trim_start_matches(':').trim();
-                    if !name.is_empty() {
-                        params.push(DeclaredParam {
-                            name: name.to_string(),
-                            description: after.to_string(),
-                            required: true, // finalized below
-                            shape: "string".to_string(),
-                            default: None,
-                        });
-                    }
+            if let Some(rest) = item.strip_prefix('`')
+                && let Some(close) = rest.find('`')
+            {
+                let name = &rest[..close];
+                let after = rest[close + 1..].trim_start_matches(':').trim();
+                if !name.is_empty() {
+                    params.push(DeclaredParam {
+                        name: name.to_string(),
+                        description: after.to_string(),
+                        required: true, // finalized below
+                        shape: "string".to_string(),
+                        default: None,
+                    });
                 }
             }
         } else if !lt.is_empty() {
