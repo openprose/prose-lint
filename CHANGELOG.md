@@ -36,6 +36,10 @@ Pre-public readiness pass ahead of open-sourcing under the OpenProse org.
 
 ### Added
 
+- `known_contract_sections()` for Rust consumers and the WASM
+  `known_sections()` export. Both expose the linter's authoritative lowercase
+  contract-heading vocabulary so editor highlighting does not maintain a
+  second H3 section list.
 - Vendored conformance suite at `specs/conformance/` (a `manifest.json` plus
   six `.prose` cases) so `cargo run -- conformance` runs offline against fixed,
   in-repo expectations.

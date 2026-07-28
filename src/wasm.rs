@@ -49,3 +49,11 @@ pub fn parameters(source: &str) -> JsValue {
     let params = crate::params::declared_parameters(source);
     serde_wasm_bindgen::to_value(&params).unwrap_or(JsValue::NULL)
 }
+
+/// Authoritative lowercase vocabulary for recognized contract-section
+/// headings. Presentation layers use this to stay aligned with lint typo
+/// detection instead of maintaining their own section list.
+#[wasm_bindgen]
+pub fn known_sections() -> JsValue {
+    serde_wasm_bindgen::to_value(crate::known_contract_sections()).unwrap_or(JsValue::NULL)
+}

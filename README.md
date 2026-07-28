@@ -271,7 +271,7 @@ The public `lint` command targets the current declarative Markdown language. A l
 ## Editor support
 
 - **LSP:** `cargo build` also produces an `openprose-lsp` language-server binary for editor diagnostics (live lint + hover).
-- **WASM:** the linter library compiles to WebAssembly (`cargo build --target wasm32-unknown-unknown --lib`); `src/wasm.rs` exports `lint`/`hover` for embedding in external editors and tools. It has no in-repo consumer and `scripts/ci.sh` only compiles it, so treat it as a stable but lightly maintained integration surface.
+- **WASM:** the linter library compiles to WebAssembly (`cargo build --target wasm32-unknown-unknown --lib`); `src/wasm.rs` exports `lint`, `hover`, `parameters`, and `known_sections` for embedding in external editors and tools. `known_sections` returns the same authoritative contract-heading vocabulary used by typo detection, so consumers do not need to maintain a duplicate H3 list. The WASM build has no in-repo consumer and `scripts/ci.sh` only compiles it, so treat it as a stable but lightly maintained integration surface.
 
 ## Development
 

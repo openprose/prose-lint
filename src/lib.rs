@@ -31,6 +31,7 @@ pub mod spec_source;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
 
+pub use current_lint::known_contract_sections;
 pub use diag::{Diagnostic, Severity};
 pub use lint::{LintResult, count_diagnostics, lint_source, lint_source_with_profile};
 #[cfg(not(target_arch = "wasm32"))]

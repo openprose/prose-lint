@@ -155,6 +155,16 @@ pub(crate) const KNOWN_CONTRACT_SECTIONS: &[&str] = &[
     "payload",
 ];
 
+/// Return the authoritative lowercase vocabulary for recognized contract
+/// section headings.
+///
+/// Consumers should use this helper instead of maintaining a separate list so
+/// editor highlighting and other presentation layers stay aligned with lint
+/// typo detection.
+pub fn known_contract_sections() -> &'static [&'static str] {
+    KNOWN_CONTRACT_SECTIONS
+}
+
 // Contract sections per current spec kind (contract-markdown.md "Canonical
 // Sections" table). Used for the MDW013 message only; detection is against
 // KNOWN_CONTRACT_SECTIONS so candidate-tolerated sections stay accepted.
