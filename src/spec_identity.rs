@@ -921,6 +921,7 @@ mod tests {
     use crate::spec_source::{SpecPaths, SpecSource};
     use serde_json::json;
     use std::fs;
+    #[cfg(unix)]
     use std::os::unix::fs as unix_fs;
     use std::path::{Path, PathBuf};
     use std::process::Command;
@@ -1589,6 +1590,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn rejects_symlink_artifacts_that_leave_direct_mode_root() {
         let dir = tempdir().unwrap();
         let skill_root = dir.path().join("skill/open-prose");
@@ -1664,6 +1666,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn rejects_symlinked_artifact_directories_that_leave_direct_mode_root() {
         let dir = tempdir().unwrap();
         let skill_root = dir.path().join("skill/open-prose");

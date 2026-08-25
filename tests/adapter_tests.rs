@@ -1,9 +1,16 @@
-use serde_json::{Value, json};
+use serde_json::Value;
+#[cfg(unix)]
+use serde_json::json;
+#[cfg(unix)]
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
 use std::path::Path;
 use std::process::Command;
+#[cfg(unix)]
 use std::sync::{Mutex, MutexGuard};
+#[cfg(unix)]
 use tempfile::tempdir;
 
 /// The host-mediated dogfood tests each install a fake host binary (`codex`,
@@ -15,8 +22,10 @@ use tempfile::tempdir;
 /// 1`, "unexpected service:"). They are serialized through this mutex so each
 /// host-mediated proof gets a clean, uncontended environment. Regression guard
 /// for that flake.
+#[cfg(unix)]
 static HOST_MEDIATED_DOGFOOD: Mutex<()> = Mutex::new(());
 
+#[cfg(unix)]
 fn host_mediated_dogfood_guard() -> MutexGuard<'static, ()> {
     HOST_MEDIATED_DOGFOOD
         .lock()
@@ -117,6 +126,7 @@ fn adapter_dogfood_requires_manifest_and_program() {
 }
 
 #[test]
+#[cfg(unix)]
 fn adapter_dogfood_uses_phase_specific_system_append_files() {
     let dir = tempdir().unwrap();
     let bin_dir = dir.path().join("bin");
@@ -259,6 +269,7 @@ esac
 }
 
 #[test]
+#[cfg(unix)]
 fn adapter_dogfood_supports_codex_host_mediated_path() {
     let _guard = host_mediated_dogfood_guard();
     let dir = tempdir().unwrap();
@@ -519,6 +530,7 @@ EOF
 }
 
 #[test]
+#[cfg(unix)]
 fn adapter_dogfood_supports_hermes_host_mediated_path() {
     let _guard = host_mediated_dogfood_guard();
     let dir = tempdir().unwrap();

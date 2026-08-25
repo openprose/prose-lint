@@ -1,6 +1,7 @@
 use openprose_lint::spec_identity::artifact_digest;
 use serde_json::{Value, json};
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs as unix_fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -301,6 +302,7 @@ fn specs_verify_named_openprose_uses_registry_identity_without_manifest() {
 }
 
 #[test]
+#[cfg(unix)]
 fn specs_verify_rejects_symlinked_artifact_directories() {
     let dir = tempdir().unwrap();
     let skill_root = dir.path().join("skill/open-prose");
@@ -364,6 +366,7 @@ fn specs_verify_rejects_symlinked_artifact_directories() {
 }
 
 #[test]
+#[cfg(unix)]
 fn specs_verify_rejects_package_bundle_symlinked_artifact_directories() {
     let dir = tempdir().unwrap();
     let package_root = dir.path().join("node_modules/@openprose/reactor");
